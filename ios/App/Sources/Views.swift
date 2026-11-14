@@ -31,7 +31,7 @@ struct PomDaisyApp: App {
                 }
             }
         }
-        .onChange(of: phase) { _, now in
+        .onChange(of: phase) { now in
             switch now {
             case .background:
                 if emulator.running && !emulator.paused {
