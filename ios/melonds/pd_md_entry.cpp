@@ -40,6 +40,7 @@ bool penDown = false;
 int penX = 0, penY = 0;
 size_t stateSize = 0;
 std::atomic<int> fieldBits {0}; // the field read after the last frame, for the app's thread
+const PkNdsFieldGame* field = nullptr; // the cart's field-read table (null: none)
 std::vector<uint32_t> frame(PK_NDS_WIDE_MAX_W * PK_NDS_WIDE_MAX_H);
 uint32_t touchScreen[PK_NDS_W * PK_NDS_H];
 int16_t audio[8192 * 2];
@@ -99,10 +100,13 @@ uint32_t keys()
     return k;
 }
 
-// The scenes EXPAND shows wide: the overworld (with a text box over it) and a fade between two maps. A menu screen, a
-// battle and a cart without field reads keep the screen's own 4:3.
+// The scenes EXPAND shows wide: the overworld (with a text box over it), a fade between two maps, and a battle where
+// the core fills the margins (Black / White's all-3D battles; Gen 4's from the battle background, as pk_nds.cpp decides).
+// A menu screen and a cart without field reads keep the screen's own 4:3.
 bool wideScene()
 {
+    if ((fieldBits.load() & PK_NDS_FIELD_BATTLE) && field)
+        return pk_nds_battle_3d(field) || pk_nds_battle_margins(field);
     int scene = pk_ndsm_wide_scene();
     return scene == 0 || scene == 1 || scene == 5;
 }
@@ -130,6 +134,8 @@ bool pdmd_load_game(const struct retro_game_info* info)
     statePath = saveDir + "/.melonds-state.tmp";
     if (!pk_ndsm_init(info->path, (saveDir + "/" + base + ".sav").c_str(), SAMPLE_RATE)) return false;
     loaded = true;
+    char code[5] = {};
+    field = pk_ndsm_rom_code(code) ? pk_nds_field_game(code, pk_ndsm_rom_revision()) : nullptr;
     winX = winY = 0;
     winW = PK_NDS_W;
     winH = PK_NDS_H;

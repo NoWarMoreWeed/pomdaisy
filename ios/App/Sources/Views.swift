@@ -239,10 +239,11 @@ struct GameView: View {
                 menuButton.padding(.top, 6).padding(.trailing, portrait ? 10 : 0)
             }
             // Upright: the game's top left corner. Sideways L sits there, so the bottom middle (between SELECT and START).
-            .overlay(alignment: portrait ? .topLeading : .bottom) {
+            // Sideways with EXPAND the bottom middle holds SELECT / TOUCH / START: the bottom left corner then.
+            .overlay(alignment: portrait ? .topLeading : expanded ? .bottomLeading : .bottom) {
                 if liveStats {
                     LiveStats()
-                        .padding(.leading, portrait ? 8 : 0)
+                        .padding(.leading, portrait ? 8 : expanded ? max(insets.leading * 0.5, 8) + 4 : 0)
                         .padding(portrait ? .top : .bottom, 6)
                         .allowsHitTesting(false)
                 }
