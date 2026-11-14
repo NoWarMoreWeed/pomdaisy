@@ -92,7 +92,8 @@ struct LibraryView: View {
     @EnvironmentObject var library: Library
     @EnvironmentObject var emulator: Emulator
     @State private var importing = false
-    @State private var androidUI = false
+    // CI's simulator test opens the Android app at once (PD_ANDROID=1).
+    @State private var androidUI = ProcessInfo.processInfo.environment["PD_ANDROID"] == "1"
 
     private static var romTypes: [UTType] {
         ["gba", "gb", "gbc", "nds"].compactMap { UTType(filenameExtension: $0) } + [.data]

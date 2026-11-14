@@ -98,13 +98,21 @@ if(APPLE)
   if(NOT MIN_IOS)
     set(MIN_IOS 16.0)
   endif()
-  execute_process(COMMAND xcrun --sdk iphoneos --show-sdk-version OUTPUT_VARIABLE IOS_SDK OUTPUT_STRIP_TRAILING_WHITESPACE)
+  # The device or the simulator (CMAKE_OSX_SYSROOT=iphonesimulator: CI's simulator test).
+  if(CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
+    set(IOS_SDK_NAME iphonesimulator)
+    set(IOS_PLATFORM ios-simulator)
+  else()
+    set(IOS_SDK_NAME iphoneos)
+    set(IOS_PLATFORM ios)
+  endif()
+  execute_process(COMMAND xcrun --sdk ${IOS_SDK_NAME} --show-sdk-version OUTPUT_VARIABLE IOS_SDK OUTPUT_STRIP_TRAILING_WHITESPACE)
   if(NOT IOS_SDK)
     set(IOS_SDK ${MIN_IOS})
   endif()
   add_custom_command(OUTPUT ${OBJ}
     COMMAND sh -c "nm -gU $<TARGET_FILE:pomdaisy_android_glue> | awk '{print $NF}' | grep -E '^_(Java_|pd_jni_)' | sort -u > ${SYMS}"
-    COMMAND xcrun ld -r -arch arm64 -platform_version ios ${MIN_IOS} ${IOS_SDK} -exported_symbols_list ${SYMS} -force_load ${GLUE} ${PARTS} -o ${OBJ}
+    COMMAND xcrun ld -r -arch arm64 -platform_version ${IOS_PLATFORM} ${MIN_IOS} ${IOS_SDK} -exported_symbols_list ${SYMS} -force_load ${GLUE} ${PARTS} -o ${OBJ}
     DEPENDS ${DEPS} VERBATIM)
 else()
   add_custom_command(OUTPUT ${OBJ}

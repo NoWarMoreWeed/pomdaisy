@@ -126,13 +126,21 @@ if(APPLE)
   if(NOT MIN_IOS)
     set(MIN_IOS 16.0)
   endif()
-  execute_process(COMMAND xcrun --sdk iphoneos --show-sdk-version OUTPUT_VARIABLE IOS_SDK OUTPUT_STRIP_TRAILING_WHITESPACE)
+  # The device or the simulator (CMAKE_OSX_SYSROOT=iphonesimulator: CI's simulator test).
+  if(CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
+    set(IOS_SDK_NAME iphonesimulator)
+    set(IOS_PLATFORM ios-simulator)
+  else()
+    set(IOS_SDK_NAME iphoneos)
+    set(IOS_PLATFORM ios)
+  endif()
+  execute_process(COMMAND xcrun --sdk ${IOS_SDK_NAME} --show-sdk-version OUTPUT_VARIABLE IOS_SDK OUTPUT_STRIP_TRAILING_WHITESPACE)
   if(NOT IOS_SDK)
     set(IOS_SDK ${MIN_IOS})
   endif()
   # ld -r turns everything outside the list into private symbols, and those into local ones.
   add_custom_command(OUTPUT ${OBJ}
-    COMMAND xcrun ld -r -arch arm64 -platform_version ios ${MIN_IOS} ${IOS_SDK}
+    COMMAND xcrun ld -r -arch arm64 -platform_version ${IOS_PLATFORM} ${MIN_IOS} ${IOS_SDK}
       -exported_symbols_list ${EXPORTS_LD} -all_load ${PARTS} -o ${OBJ}
     DEPENDS pomdaisy_ds_entry pd_ds_presentation dsperate_core ${EXPORTS} VERBATIM)
 else()

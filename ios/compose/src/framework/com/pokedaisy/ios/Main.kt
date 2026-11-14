@@ -10,6 +10,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.window.ComposeUIViewController
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.toKString
 import platform.UIKit.UIViewController
 
 private var registered = false
@@ -27,12 +29,21 @@ private fun registerActivities() {
     ActivityHost.register("LinkActivity") { com.pokedaisy.app.LinkActivity() }
 }
 
+@OptIn(ExperimentalForeignApi::class)
 /** The app as on Android: its Library first, the rest started from there. [onMissing]: a screen iOS hasn't got yet. */
 fun AppViewController(onMissing: (String) -> Unit): UIViewController = ComposeUIViewController {
     registerActivities()
     ActivityHost.missing = onMissing
     LaunchedEffect(Unit) {
-        if (ActivityHost.top == null) ActivityHost.start(android.content.Intent().also { it.component = "LibraryActivity" })
+        if (ActivityHost.top == null) {
+            ActivityHost.start(android.content.Intent().also { it.component = "LibraryActivity" })
+            // CI's simulator test: PD_TEST_ROM starts that game over the Library, as a tap on its card does.
+            val rom = platform.posix.getenv("PD_TEST_ROM")?.toKString()
+            if (!rom.isNullOrEmpty()) {
+                println("PD_TEST: starting $rom")
+                ActivityHost.start(android.content.Intent().also { it.component = "PokeDaisyActivity" }.putExtra("rom", rom))
+            }
+        }
     }
     BackEdge { ActivityHost.Content() }
 }
