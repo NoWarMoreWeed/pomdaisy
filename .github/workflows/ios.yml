@@ -108,22 +108,19 @@ jobs:
           chmod 600 "$key"
           echo "key secret: $(printf '%s' "$ASC_KEY_P8" | wc -c | tr -d ' ') chars, header in secret: $(printf '%s' "$ASC_KEY_P8" | grep -c 'BEGIN PRIVATE KEY'), body: ${#body} chars"
           if openssl pkey -in "$key" -noout 2>/dev/null; then echo "key: a valid private key"; else echo "::error::ASC_KEY_P8 is not the contents of an App Store Connect .p8 key"; exit 1; fi
-      - name: Archive (signed)
+      - name: Archive (for TestFlight)
         if: env.HAS_ASC == 'true'
         working-directory: ios/App
         env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          # Archived unsigned; the export below signs it for distribution (a cloud-managed certificate). Signing the
+          # archive itself made Xcode create a new development certificate on every run (the runner is new each
+          # time), until the account had its maximum and the build stopped with "Choose a certificate to revoke".
           set -o pipefail
           xcodebuild -project PomDaisy.xcodeproj -scheme PomDaisy -configuration Release \
             -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/PomDaisy.xcarchive" archive \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" 2>&1 | grep -E "error|warning: .*\.swift|ARCHIVE|BUILD|Signing|provisioning" | tail -n 150
       - name: Upload to TestFlight
         if: env.HAS_ASC == 'true' && github.event_name != 'pull_request'
