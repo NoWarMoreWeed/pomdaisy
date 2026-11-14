@@ -10,10 +10,14 @@ enum Storage {
     static let states = documents.appendingPathComponent("states", isDirectory: true)
     static let system = documents.appendingPathComponent("system", isDirectory: true)
 
-    static let romExtensions: Set<String> = ["gba", "gb", "gbc"]
+    /// The Nintendo DS core's own files (its settings; see `dsSaveHint`).
+    static let dsCore = system.appendingPathComponent("ds", isDirectory: true)
+
+    static let romExtensions: Set<String> = ["gba", "gb", "gbc", "nds"]
+    static func isDS(_ rom: URL) -> Bool { rom.pathExtension.lowercased() == "nds" }
 
     static func prepare() {
-        for dir in [roms, saves, backups, states, system] {
+        for dir in [roms, saves, backups, states, system, dsCore] {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         }
     }
@@ -24,6 +28,10 @@ enum Storage {
     static func slotState(for rom: URL, slot: Int) -> URL {
         states.appendingPathComponent(baseName(rom) + ".slot\(slot).state")
     }
+
+    /// A DS game the core has no save type for takes its save's size from `<name>.srm` in its save folder while it
+    /// loads: the save is copied there for the load.
+    static func dsSaveHint(for rom: URL) -> URL { dsCore.appendingPathComponent(baseName(rom) + ".srm") }
 
     /// Writes through a temporary file, so a crash mid-write never leaves half a save.
     static func writeAtomically(_ data: Data, to url: URL) throws {

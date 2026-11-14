@@ -82,6 +82,7 @@ final class Library: ObservableObject {
         switch rom.pathExtension.lowercased() {
         case "gba": return "Game Boy Advance"
         case "gbc": return "Game Boy Color"
+        case "nds": return "Nintendo DS"
         default: return "Game Boy"
         }
     }
@@ -93,7 +94,7 @@ struct LibraryView: View {
     @State private var importing = false
 
     private static var romTypes: [UTType] {
-        ["gba", "gb", "gbc"].compactMap { UTType(filenameExtension: $0) } + [.data]
+        ["gba", "gb", "gbc", "nds"].compactMap { UTType(filenameExtension: $0) } + [.data]
     }
 
     var body: some View {
@@ -103,7 +104,7 @@ struct LibraryView: View {
                     VStack(spacing: 16) {
                         Image(systemName: "gamecontroller").font(.system(size: 48))
                         Text("Noch keine Spiele").font(.title2.bold())
-                        Text("Tippe auf + und wähle deine ROM-Dateien (.gba, .gb, .gbc). Du kannst sie auch in der Dateien-App unter „Auf meinem iPhone > PomDaisy > roms“ ablegen.")
+                        Text("Tippe auf + und wähle deine ROM-Dateien (.gba, .gb, .gbc, .nds). Du kannst sie auch in der Dateien-App unter „Auf meinem iPhone > PomDaisy > roms“ ablegen.")
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 32)
@@ -179,7 +180,8 @@ struct GameView: View {
                 }
                 if !gamepad.connected {
                     TouchControls(style: portrait ? .below : .overlay,
-                                  reservedTop: portrait ? geo.safeAreaInsets.top + gameH : 0)
+                                  reservedTop: portrait ? geo.safeAreaInsets.top + gameH : 0,
+                                  ds: emulator.isDS)
                         .ignoresSafeArea()
                 }
             }
@@ -255,6 +257,16 @@ struct GameMenu: View {
                     Picker("Tempo", selection: $emulator.fastForwardSpeed) {
                         ForEach([2, 3, 4, 6, 8], id: \.self) { Text("\($0)x").tag($0) }
                     }
+                }
+                Section {
+                    // The core's time for a frame against the time a frame has: over 100 % the game runs slow.
+                    LabeledContent("Auslastung", value: "\(Int((emulator.load * 100).rounded())) %")
+                } header: {
+                    Text("Leistung")
+                } footer: {
+                    Text(emulator.isDS
+                        ? "Nintendo DS läuft ohne JIT. Bleibt der Wert unter 100 %, läuft das Spiel in voller Geschwindigkeit."
+                        : "Unter 100 % läuft das Spiel in voller Geschwindigkeit.")
                 }
                 Section {
                     Button { emulator.reset(); close() } label: {

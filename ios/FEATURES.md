@@ -14,7 +14,7 @@ geschrieben ist, muss für iOS neu gebaut werden.
 | Funktion | Status | Anmerkung |
 |---|---|---|
 | GBA, Game Boy, Game Boy Color | ✅ | ein mGBA-Kern, ohne JIT |
-| Nintendo DS | ❌ | braucht einen eigenen Kern; ohne JIT langsam |
+| Nintendo DS | 🟡 | DSperate-Kern ohne JIT (Interpreter), ungetestet auf dem Gerät; das Pause-Menü zeigt die Auslastung. Ein Bildschirm, der Touchscreen kommt bei Bedarf dazu (BILDSCHIRM wechselt von Hand) |
 | Spieleliste, Import (Dateien-App, Teilen, +) | ✅ | |
 | ZIP / 7z-Archive | ❌ | |
 | Spielnamen statt Dateinamen (Hash-Erkennung) | ❌ | aktuell nur der Dateiname ohne Klammern |
@@ -44,6 +44,7 @@ geschrieben ist, muss für iOS neu gebaut werden.
 | Schnellmenü: PC, FLY, REPEL, BIKE, WILD | 🟡 | Touch im Test |
 | Freies Fliegen, Panorama-Flug | 🟡 | im Kern vorhanden, ungetestet |
 | EXPAND (Widescreen), ZOOM OUT | 🟡 | Fix fürs Drehen im Test |
+| DS-Begleiter (Platin, HeartGold / SoulSilver, Schwarz / Weiß und Nachfolger) | 🟡 | aus dem DS-Kern der Linux-Version: BEGLEITER tippen, halten = Schnellmenü; ungetestet |
 | Begleiter und Spiel gleichzeitig (iPad, faltbares iPhone, Fernseher) | ❌ | Kern liefert nur ein Bild; braucht Erweiterung wie bei der 3DS-Version |
 
 ## Spielgefühl

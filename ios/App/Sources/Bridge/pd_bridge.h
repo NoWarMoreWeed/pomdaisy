@@ -16,7 +16,9 @@ enum {
 
 /* Directories (system = BIOS / core files, saves = where the core may write its own). Before pd_load. */
 void pd_set_dirs(const char *systemDir, const char *saveDir);
-/* Loads the core and the game (the ROM's bytes are copied). */
+/* A Nintendo DS game (by its file name): the DS core plays it, and reads it from its path itself. */
+bool pd_is_ds_path(const char *path);
+/* Loads the core for the game and the game. A Game Boy game's bytes are copied; a DS game takes rom NULL / size 0. */
 bool pd_load(const char *path, const void *rom, size_t size);
 void pd_unload(void);
 bool pd_loaded(void);
@@ -24,6 +26,8 @@ void pd_reset(void);
 /* One frame. */
 void pd_run(void);
 double pd_fps(void);
+/* How long the core takes for one frame, in milliseconds (a running average). Over 1000 / pd_fps() the game runs slow. */
+double pd_frame_ms(void);
 double pd_sample_rate(void);
 
 /* Input, from any thread. */

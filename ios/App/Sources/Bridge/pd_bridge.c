@@ -2,6 +2,7 @@
  * things: the core's options (pokedaisy_panel among them), the frame, the sound and the joypad. */
 #include "pd_bridge.h"
 #include "libretro.h"
+#include "pd_ds_core.h"
 
 #include <pthread.h>
 #include <stdarg.h>
@@ -9,6 +10,48 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <time.h>
+
+/* ---- the two cores: the Game Boy one (mGBA + the companion, ios/core: retro_*) and the Nintendo DS one (DSperate +
+ * the DS companion, ios/ds: pdds_*). Both are linked in; a game's file name picks one. ---- */
+struct pd_core {
+  void (*set_environment)(retro_environment_t);
+  void (*set_video_refresh)(retro_video_refresh_t);
+  void (*set_audio_sample)(retro_audio_sample_t);
+  void (*set_audio_sample_batch)(retro_audio_sample_batch_t);
+  void (*set_input_poll)(retro_input_poll_t);
+  void (*set_input_state)(retro_input_state_t);
+  void (*init)(void);
+  void (*deinit)(void);
+  bool (*load_game)(const struct retro_game_info *);
+  void (*unload_game)(void);
+  void (*get_system_av_info)(struct retro_system_av_info *);
+  void (*run)(void);
+  void (*reset)(void);
+  size_t (*serialize_size)(void);
+  bool (*serialize)(void *, size_t);
+  bool (*unserialize)(const void *, size_t);
+  void *(*get_memory_data)(unsigned);
+  size_t (*get_memory_size)(unsigned);
+  bool path_only; // the core reads the game from its path itself: no copy of it in memory
+};
+static const struct pd_core gbCore = {
+  retro_set_environment, retro_set_video_refresh, retro_set_audio_sample, retro_set_audio_sample_batch,
+  retro_set_input_poll, retro_set_input_state, retro_init, retro_deinit, retro_load_game, retro_unload_game,
+  retro_get_system_av_info, retro_run, retro_reset, retro_serialize_size, retro_serialize, retro_unserialize,
+  retro_get_memory_data, retro_get_memory_size, false};
+static const struct pd_core dsCore = {
+  pdds_set_environment, pdds_set_video_refresh, pdds_set_audio_sample, pdds_set_audio_sample_batch,
+  pdds_set_input_poll, pdds_set_input_state, pdds_init, pdds_deinit, pdds_load_game, pdds_unload_game,
+  pdds_get_system_av_info, pdds_run, pdds_reset, pdds_serialize_size, pdds_serialize, pdds_unserialize,
+  pdds_get_memory_data, pdds_get_memory_size, true};
+static const struct pd_core *core = &gbCore;
+
+bool pd_is_ds_path(const char *path) {
+  const char *dot = path ? strrchr(path, '.') : NULL;
+  return dot && !strcasecmp(dot, ".nds");
+}
 
 /* ---- the core's options: defaults from the core, pokedaisy_panel from us ---- */
 #define OPTIONS_MAX 160
@@ -75,6 +118,7 @@ static _Atomic bool pointerPressed; // a press since the last frame: held for th
 static bool pointerFrame;           // what the core sees this frame
 static _Atomic bool ffOn;
 static _Atomic int ffSpeed = 1;
+static _Atomic double frameMs; // the core's time for a frame, averaged
 
 void pd_set_dirs(const char *s, const char *d) {
   snprintf(systemDir, sizeof systemDir, "%s", s ? s : ".");
@@ -333,28 +377,41 @@ static int16_t input_state(unsigned port, unsigned device, unsigned index, unsig
 bool pd_load(const char *path, const void *rom, size_t size) {
   if (loaded)
     pd_unload();
-  retro_set_environment(environment);
-  retro_set_video_refresh(video_refresh);
-  retro_set_audio_sample(audio_sample);
-  retro_set_audio_sample_batch(audio_batch);
-  retro_set_input_poll(input_poll);
-  retro_set_input_state(input_state);
-  retro_init();
-  free(romCopy);
-  romCopy = malloc(size);
-  if (!romCopy) {
-    retro_deinit();
+  core = pd_is_ds_path(path) ? &dsCore : &gbCore;
+  if (!core->path_only && (!rom || !size))
     return false;
+  pthread_mutex_lock(&optionLock);
+  optionN = 0; // each core declares its own
+  pthread_mutex_unlock(&optionLock);
+  pixelFormat = RETRO_PIXEL_FORMAT_0RGB1555;
+  core->set_environment(environment);
+  core->set_video_refresh(video_refresh);
+  core->set_audio_sample(audio_sample);
+  core->set_audio_sample_batch(audio_batch);
+  core->set_input_poll(input_poll);
+  core->set_input_state(input_state);
+  core->init();
+  free(romCopy);
+  romCopy = NULL;
+  struct retro_game_info gi = {path, NULL, 0, NULL};
+  if (!core->path_only) {
+    romCopy = malloc(size);
+    if (!romCopy) {
+      core->deinit();
+      return false;
+    }
+    memcpy(romCopy, rom, size);
+    gi.data = romCopy;
+    gi.size = size;
   }
-  memcpy(romCopy, rom, size);
-  struct retro_game_info gi = {path, romCopy, size, NULL};
-  if (!retro_load_game(&gi)) {
-    retro_deinit();
+  if (!core->load_game(&gi)) {
+    core->deinit();
     free(romCopy);
     romCopy = NULL;
     return false;
   }
-  retro_get_system_av_info(&av);
+  core->get_system_av_info(&av);
+  atomic_store(&frameMs, 0);
   pthread_mutex_lock(&ringLock);
   ringRead = ringWrite = 0;
   pthread_mutex_unlock(&ringLock);
@@ -364,8 +421,8 @@ bool pd_load(const char *path, const void *rom, size_t size) {
 void pd_unload(void) {
   if (!loaded)
     return;
-  retro_unload_game();
-  retro_deinit();
+  core->unload_game();
+  core->deinit();
   free(romCopy);
   romCopy = NULL;
   loaded = false;
@@ -376,24 +433,32 @@ void pd_unload(void) {
 bool pd_loaded(void) { return loaded; }
 void pd_reset(void) {
   if (loaded)
-    retro_reset();
+    core->reset();
 }
 void pd_run(void) {
   // A tap that went down and up between two frames still reaches the core as one frame down, then up: the core
   // takes a tap on the quick menu / companion when the finger lifts.
   pointerFrame = atomic_load(&pointerDown) || atomic_exchange(&pointerPressed, false);
-  if (loaded)
-    retro_run();
+  if (!loaded)
+    return;
+  struct timespec a, b;
+  clock_gettime(CLOCK_MONOTONIC, &a);
+  core->run();
+  clock_gettime(CLOCK_MONOTONIC, &b);
+  double ms = (double)(b.tv_sec - a.tv_sec) * 1000 + (double)(b.tv_nsec - a.tv_nsec) / 1e6;
+  double avg = atomic_load(&frameMs);
+  atomic_store(&frameMs, avg > 0 ? avg + (ms - avg) / 30 : ms);
 }
+double pd_frame_ms(void) { return atomic_load(&frameMs); }
 double pd_fps(void) { return av.timing.fps > 0 ? av.timing.fps : 59.7275; }
 double pd_sample_rate(void) { return av.timing.sample_rate > 0 ? av.timing.sample_rate : 32768; }
 
 size_t pd_save_image(void *out) {
   if (!loaded)
     return 0;
-  void *mem = retro_get_memory_data(RETRO_MEMORY_SAVE_RAM), *rtc = retro_get_memory_data(RETRO_MEMORY_RTC);
-  size_t n = mem ? retro_get_memory_size(RETRO_MEMORY_SAVE_RAM) : 0;
-  size_t rn = rtc ? retro_get_memory_size(RETRO_MEMORY_RTC) : 0;
+  void *mem = core->get_memory_data(RETRO_MEMORY_SAVE_RAM), *rtc = core->get_memory_data(RETRO_MEMORY_RTC);
+  size_t n = mem ? core->get_memory_size(RETRO_MEMORY_SAVE_RAM) : 0;
+  size_t rn = rtc ? core->get_memory_size(RETRO_MEMORY_RTC) : 0;
   if (out && n)
     memcpy(out, mem, n);
   if (out && n && rn)
@@ -403,15 +468,15 @@ size_t pd_save_image(void *out) {
 void pd_save_load(const void *d, size_t fn) {
   if (!loaded || !d)
     return;
-  void *mem = retro_get_memory_data(RETRO_MEMORY_SAVE_RAM), *rtc = retro_get_memory_data(RETRO_MEMORY_RTC);
-  size_t n = mem ? retro_get_memory_size(RETRO_MEMORY_SAVE_RAM) : 0;
-  size_t rn = rtc ? retro_get_memory_size(RETRO_MEMORY_RTC) : 0;
+  void *mem = core->get_memory_data(RETRO_MEMORY_SAVE_RAM), *rtc = core->get_memory_data(RETRO_MEMORY_RTC);
+  size_t n = mem ? core->get_memory_size(RETRO_MEMORY_SAVE_RAM) : 0;
+  size_t rn = rtc ? core->get_memory_size(RETRO_MEMORY_RTC) : 0;
   if (!n)
     return;
   memcpy(mem, d, fn < n ? fn : n);
   if (rn && fn > n)
     memcpy(rtc, (const uint8_t *)d + n, fn - n < rn ? fn - n : rn);
 }
-size_t pd_state_size(void) { return loaded ? retro_serialize_size() : 0; }
-bool pd_state_save(void *out, size_t size) { return loaded && out && retro_serialize(out, size); }
-bool pd_state_load(const void *data, size_t size) { return loaded && data && retro_unserialize(data, size); }
+size_t pd_state_size(void) { return loaded ? core->serialize_size() : 0; }
+bool pd_state_save(void *out, size_t size) { return loaded && out && core->serialize(out, size); }
+bool pd_state_load(const void *data, size_t size) { return loaded && data && core->unserialize(data, size); }

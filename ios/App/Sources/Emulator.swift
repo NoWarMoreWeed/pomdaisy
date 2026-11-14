@@ -9,6 +9,8 @@ final class Emulator: ObservableObject {
 
     @Published private(set) var rom: URL?
     @Published private(set) var running = false
+    /// A Nintendo DS game is running (the DS core: X / Y are the game's, the companion is on L2).
+    @Published private(set) var isDS = false
     @Published var paused = false {
         didSet { if paused { flushSave() } }
     }
@@ -40,13 +42,25 @@ final class Emulator: ObservableObject {
     // ---- the game ----
     func start(_ url: URL) {
         stop()
-        guard let data = try? Data(contentsOf: url) else {
-            message = "Die Datei ließ sich nicht lesen."
-            return
+        // A DS game (up to 512 MB) is read by its core straight from the file, never copied into memory.
+        let ds = Storage.isDS(url)
+        var data = Data()
+        if ds {
+            guard FileManager.default.isReadableFile(atPath: url.path) else {
+                message = "Die Datei ließ sich nicht lesen."
+                return
+            }
+        } else {
+            guard let bytes = try? Data(contentsOf: url) else {
+                message = "Die Datei ließ sich nicht lesen."
+                return
+            }
+            data = bytes
         }
         Storage.backupSave(for: url)
         stopRequested = false
         rom = url
+        isDS = ds
         running = true
         paused = false
         fastForward = false
@@ -120,6 +134,9 @@ final class Emulator: ObservableObject {
         return FileManager.default.fileExists(atPath: Storage.slotState(for: rom, slot: slot).path)
     }
 
+    /// How busy the core is: its time for a frame against the time a frame has (1 = just fast enough).
+    var load: Double { pd_frame_ms() * pd_fps() / 1000 }
+
     func setPanel(width: Int, height: Int) { pd_set_panel(Int32(width), Int32(height)) }
 
     func perform(_ job: @escaping () -> Void) {
@@ -140,8 +157,19 @@ final class Emulator: ObservableObject {
     private func loop(url: URL, data: Data) {
         Storage.prepare()
         romForThread = url
-        pd_set_dirs(Storage.system.path, Storage.saves.path)
-        let ok = data.withUnsafeBytes { pd_load(url.path, $0.baseAddress, data.count) }
+        let ds = Storage.isDS(url)
+        let ok: Bool
+        if ds {
+            let hint = Storage.dsSaveHint(for: url)
+            try? FileManager.default.removeItem(at: hint)
+            try? FileManager.default.copyItem(at: Storage.saveFile(for: url), to: hint)
+            pd_set_dirs(Storage.system.path, Storage.dsCore.path)
+            ok = pd_load(url.path, nil, 0)
+            try? FileManager.default.removeItem(at: hint)
+        } else {
+            pd_set_dirs(Storage.system.path, Storage.saves.path)
+            ok = data.withUnsafeBytes { pd_load(url.path, $0.baseAddress, data.count) }
+        }
         guard ok else {
             DispatchQueue.main.async {
                 self.message = "Dieses Spiel ließ sich nicht starten."
@@ -154,7 +182,7 @@ final class Emulator: ObservableObject {
             save.withUnsafeBytes { pd_save_load($0.baseAddress, save.count) }
         }
         lastSave = currentSaveImage()
-        // A state never carries the save (mGBA's libretro core loads them without it), so resuming is safe.
+        // A state never carries the save (both cores load them without it), so resuming is safe.
         _ = Self.readState(from: Storage.resumeState(for: url))
 
         var next = CACurrentMediaTime()

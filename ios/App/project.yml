@@ -25,7 +25,8 @@ targets:
         SWIFT_OBJC_BRIDGING_HEADER: Sources/Bridge/PomDaisy-Bridging-Header.h
         HEADER_SEARCH_PATHS: "$(SRCROOT)/../../third_party/mgba/src/platform/libretro"
         LIBRARY_SEARCH_PATHS: "$(SRCROOT)/../../build/ios"
-        OTHER_LDFLAGS: "-lpomdaisy_core"
+        # The Game Boy core (ios/core) and the Nintendo DS core (ios/ds: one prelinked object, C++ inside).
+        OTHER_LDFLAGS: "-lpomdaisy_core $(SRCROOT)/../../build/ios-ds/pomdaisy_ds.o -lc++"
         GCC_C_LANGUAGE_STANDARD: gnu11
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
@@ -75,6 +76,11 @@ targets:
             UTTypeConformsTo: [public.data]
             UTTypeTagSpecification:
               public.filename-extension: [gb]
+          - UTTypeIdentifier: com.nowarmoreweed.pomdaisy.nds
+            UTTypeDescription: Nintendo DS ROM
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [nds]
         CFBundleDocumentTypes:
           - CFBundleTypeName: Game Boy ROM
             CFBundleTypeRole: Viewer
@@ -83,3 +89,4 @@ targets:
               - com.nowarmoreweed.pomdaisy.gba
               - com.nowarmoreweed.pomdaisy.gbc
               - com.nowarmoreweed.pomdaisy.gb
+              - com.nowarmoreweed.pomdaisy.nds

@@ -1,6 +1,7 @@
 name: iOS
 
-# PomDaisy: the iOS build. Builds the core (mGBA + companion, ios/core) for iPhone / iPad, generates the Xcode project
+# PomDaisy: the iOS build. Builds the cores (mGBA + companion, ios/core; DSperate + the DS companion without JIT,
+# ios/ds) for iPhone / iPad, generates the Xcode project
 # (ios/App/project.yml, XcodeGen) and archives the app. With the App Store Connect secrets set (ASC_KEY_ID,
 # ASC_ISSUER_ID, ASC_KEY_P8, APPLE_TEAM_ID) the archive is signed and uploaded to TestFlight; without them it's an
 # unsigned compile check.
@@ -38,8 +39,10 @@ jobs:
         run: |
           echo "secret ASC_KEY_ID=$S1 ASC_ISSUER_ID=$S2 ASC_KEY_P8=$S3 APPLE_TEAM_ID=$S4"
           echo "variable ASC_KEY_ID=$V1 ASC_ISSUER_ID=$V2 ASC_KEY_P8=$V3 APPLE_TEAM_ID=$V4"
-      - name: mGBA submodule
-        run: git submodule update --init --depth 1 third_party/mgba
+      - name: Core submodules (mGBA, DSperate)
+        run: |
+          git submodule update --init --depth 1 third_party/mgba
+          git submodule update --init --recursive --depth 1 third_party/dsperate-lr
       - name: Tools
         run: |
           # App Store Connect takes only apps built with the iOS 26 SDK (Xcode 26) or later: pick the newest Xcode.
@@ -59,6 +62,23 @@ jobs:
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build build/ios --target pomdaisy_core pomdaisy_link_check
           ls -la build/ios/libpomdaisy_core.a
+      - name: Nintendo DS core for iPhone / iPad (arm64, no JIT)
+        run: |
+          cmake -S ios/ds -B build/ios-ds -G Ninja \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DPython3_EXECUTABLE="$(command -v python3)" \
+            -DPD_GB_CORE="$PWD/build/ios/libpomdaisy_core.a"
+          # The prelinked core, then the app's bridge linked with both cores (a symbol clash shows here).
+          cmake --build build/ios-ds --target pomdaisy_ds pomdaisy_ds_check
+          ls -la build/ios-ds/pomdaisy_ds.o
+          # Only the core's entry points may be visible, or its symbols meet the Game Boy core's in the app.
+          if nm -gU build/ios-ds/pomdaisy_ds.o | awk '{print $NF}' | grep -v '^_pdds_'; then
+            echo "::error::pomdaisy_ds.o exports more than its pdds_* entry points"; exit 1
+          fi
       - name: Xcode project
         working-directory: ios/App
         run: xcodegen generate
