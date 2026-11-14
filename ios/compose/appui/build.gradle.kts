@@ -28,13 +28,18 @@ val prepSrc = tasks.register<Sync>("prepSrc") {
         if (l.startsWith("package ")) l = "@file:Suppress(\"DEPRECATION_ERROR\")\n" + l + "\nimport kotlinx.coroutines.IO"
         l
     }
-    inputs.property("filterVersion", 3)
+    inputs.property("filterVersion", 4)
+    doLast {
+        val left = destinationDir.walk().filter { it.isFile && it.readText().contains(Regex("\\bexternal fun ")) }.toList()
+        if (left.isNotEmpty()) throw GradleException("external funs outside genJni's jniFiles: " + left.joinToString { it.name })
+    }
 }
 
 // The app's JNI classes. On a Mac (the iOS build) MgbaCore's `external fun`s become calls into the Android app's own
 // native glue (ios/native: its Java_* functions over a JNI of our own) through cinterop; elsewhere (a Linux check,
 // where Kotlin/Native can't run cinterop for iOS) they get stub bodies, as RaNative (RetroAchievements) does for now.
-val jniFiles = listOf("MgbaCore.kt", "achievements/RaNative.kt")
+// Every app file with an `external fun` must be listed (prepSrc fails on one that isn't: Kotlin/Native only finds it when linking).
+val jniFiles = listOf("MgbaCore.kt", "achievements/RaNative.kt", "CoopLockNative.kt", "LinkCore.kt")
 val bindNative = org.gradle.internal.os.OperatingSystem.current().isMacOsX || hasProperty("bindNative")
 val nativeDir = rootDir.resolve("../native")
 
@@ -113,7 +118,7 @@ val genJni = tasks.register("genJni") {
         for (rel in jniFiles) {
             val src = app.resolve(rel).readText()
             val bind = bindNative && rel == "MgbaCore.kt"
-            val cls = if (rel == "MgbaCore.kt") "com.pokedaisy.app.MgbaCore" else "com.pokedaisy.app.achievements.RaNative"
+            val cls = "com.pokedaisy.app." + rel.removeSuffix(".kt").replace('/', '.')
             val funs = jniFuns(src).associateBy { it.name }
             if (bind) for (f in funs.values) {
                 header.append("${cType(f.ret)} Java_${cls.replace('.', '_')}_${f.name.replace("_", "_1")}(JNIEnv *, jclass")
