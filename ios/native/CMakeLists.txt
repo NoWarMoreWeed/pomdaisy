@@ -34,6 +34,8 @@ foreach(off BUILD_SHARED SKIP_LIBRARY BUILD_GL BUILD_GLES2 BUILD_GLES3 BUILD_PER
   set(${off} OFF CACHE BOOL "" FORCE)
 endforeach()
 add_subdirectory(${MGBA_DIR} mgba EXCLUDE_FROM_ALL)
+# mGBA's log categories are tentative definitions: as definitions (not common symbols) the prelink's export list hides them.
+target_compile_options(mgba PRIVATE -fno-common)
 
 # ---- rcheevos ----
 set(RC ${ROOT}/third_party/rcheevos)
@@ -102,8 +104,7 @@ if(APPLE)
   endif()
   add_custom_command(OUTPUT ${OBJ}
     COMMAND sh -c "nm -gU $<TARGET_FILE:pomdaisy_android_glue> | awk '{print $NF}' | grep -E '^_(Java_|pd_jni_)' | sort -u > ${SYMS}"
-    # -d: common symbols (mGBA's log categories) made definitions, so the export list can hide them too.
-    COMMAND xcrun ld -r -d -arch arm64 -platform_version ios ${MIN_IOS} ${IOS_SDK} -exported_symbols_list ${SYMS} -force_load ${GLUE} ${PARTS} -o ${OBJ}
+    COMMAND xcrun ld -r -arch arm64 -platform_version ios ${MIN_IOS} ${IOS_SDK} -exported_symbols_list ${SYMS} -force_load ${GLUE} ${PARTS} -o ${OBJ}
     DEPENDS ${DEPS} VERBATIM)
 else()
   add_custom_command(OUTPUT ${OBJ}
