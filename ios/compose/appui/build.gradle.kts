@@ -11,19 +11,9 @@ plugins {
 val app = rootDir.resolve("../../app/src/main/kotlin/com/pokedaisy/app")
 // The data layer (as ui-preview's data module) and the UI (as ui-preview's root module).
 // The same files ui-preview compiles (its data module and its root module).
-val appIncludes = (findProperty("appIncludes") as String?)?.split(",") ?: listOf(
-    "companion/data/**", "companion/*.kt", "companion/i18n/**", "companion/coop/**", "FeatureFlags.kt", "MgbaCore.kt",
-    "Prefs.kt", "cheats/Cheats.kt", "GbaControls.kt", "Hotkeys.kt", "GameVolume.kt",
-    "companion/ui/**", "SettingsActivity.kt", "CoopSettingsPages.kt", "LibraryActivity.kt", "SavesLocation.kt",
-    "CoverArtSync.kt", "CoverSync.kt", "DocsApi.kt", "DocsSearch.kt", "RomFolder.kt", "StorageAccess.kt", "SetupScreen.kt",
-    "AppUpdater.kt", "AppUpdate.kt", "GameSaves.kt", "RzipSave.kt", "SaveBackups.kt", "GameInfo.kt", "LibraryOrder.kt",
-    "RomSupportRequest.kt", "RomIntake.kt", "BestEffortShare.kt", "SaveStates.kt", "RomIdentity.kt", "RomArchive.kt",
-    "CompanionSupport.kt", "CoverPicker.kt", "SteamGridDbGames.kt", "SteamGridDbClient.kt", "GameTitles.kt",
-    "SaveEditorActivity.kt", "SaveFileEdits.kt", "BpsPatch.kt", "RomPatcher.kt", "RomPatchFlow.kt", "RomCrcs.kt",
-    "ScreenScraperClient.kt", "ScreenScraperUi.kt", "GameMedia.kt", "LauncherScreen.kt",
-    "achievements/**", "overlay/Overlays.kt", "overlay/OverlayLabels.kt",
-)
-val appExcludes = (findProperty("appExcludes") as String?)?.split(",") ?: emptyList()
+val appIncludes = (findProperty("appIncludes") as String?)?.split(",") ?: listOf("**/*.kt")
+// What iOS can't run: Firebase's crash reports (src/shims has a stand-in that sends none).
+val appExcludes = (findProperty("appExcludes") as String?)?.split(",") ?: listOf("CrashReports.kt", "PixelTypeface.kt")
 
 val prepSrc = tasks.register<Sync>("prepSrc") {
     from(app) { appIncludes.forEach { include(it) }; appExcludes.forEach { exclude(it) }; jniFiles.forEach { exclude(it) } }

@@ -3,7 +3,7 @@
 // the innermost BackHandler first. One window: the top activity's setContent {} is what shows.
 package com.pokedaisy.ios
 
-import androidx.activity.ComponentActivity
+import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,12 +15,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 
 object ActivityHost {
-    private val factories = HashMap<String, () -> ComponentActivity>()
-    private val stack = mutableStateListOf<ComponentActivity>()
+    private val factories = HashMap<String, () -> Activity>()
+    private val stack = mutableStateListOf<Activity>()
     /** What a screen without an iOS version yet says (its class name). */
     var missing: ((String) -> Unit)? = null
 
-    fun register(name: String, make: () -> ComponentActivity) { factories[name] = make }
+    fun register(name: String, make: () -> Activity) { factories[name] = make }
 
     fun start(intent: android.content.Intent) = onMain {
         val name = intent.component
@@ -37,7 +37,7 @@ object ActivityHost {
         }.onFailure { it.printStackTrace() }
     }
 
-    fun finish(a: ComponentActivity) = onMain {
+    fun finish(a: Activity) = onMain {
         if (a.isFinishing) return@onMain
         a.isFinishing = true
         val i = stack.indexOf(a)
@@ -55,7 +55,7 @@ object ActivityHost {
         if (stack.size > 1) finish(top)
     }
 
-    val top: ComponentActivity? get() = stack.lastOrNull()
+    val top: Activity? get() = stack.lastOrNull()
 
     /** On the main thread (now, if this is it). */
     fun onMain(block: () -> Unit) {

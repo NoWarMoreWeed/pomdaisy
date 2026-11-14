@@ -8,6 +8,8 @@ import kotlinx.cinterop.get
 import kotlinx.cinterop.plus
 import kotlinx.cinterop.set
 import kotlinx.cinterop.usePinned
+import kotlinx.cinterop.reinterpret
+import kotlinx.cinterop.allocArray
 
 class ByteOrder private constructor(private val name: String) {
     override fun toString() = name
@@ -138,6 +140,10 @@ class ByteBuffer private constructor(private val arr: ByteArray, private val off
     val float: Float get() = getFloat()
     val double: Double get() = getDouble()
     fun asShortBuffer(): ShortBuffer = ShortBuffer(this)
+    /** Over the same memory for a direct buffer (from its position), a copy of the floats otherwise. */
+    @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+    fun asFloatBuffer(): FloatBuffer = if (nat != null) FloatBuffer((nat + (off + pos))!!.reinterpret(), (lim - pos) / 4)
+        else FloatBuffer.wrap(FloatArray((lim - pos) / 4) { getFloat(pos + it * 4) })
     fun asIntBuffer(): IntBuffer = IntBuffer(this)
 
     override fun compareTo(other: ByteBuffer): Int {
@@ -150,7 +156,8 @@ class ByteBuffer private constructor(private val arr: ByteArray, private val off
         fun allocate(n: Int) = ByteBuffer(ByteArray(n), 0, n)
         /** A direct buffer over native memory (the JNI glue's NewDirectByteBuffer). */
         fun native(p: kotlinx.cinterop.CPointer<kotlinx.cinterop.ByteVar>, capacity: Int) = ByteBuffer(ByteArray(0), 0, capacity, p).also { it.big = false }
-        fun allocateDirect(n: Int) = allocate(n)
+        /** Native memory (kept for good: the app makes a few, for GL), so asFloatBuffer and GL see the same bytes. */
+        fun allocateDirect(n: Int) = native(kotlinx.cinterop.nativeHeap.allocArray<kotlinx.cinterop.ByteVar>(maxOf(n, 1)), n)
         fun wrap(a: ByteArray) = ByteBuffer(a, 0, a.size)
         fun wrap(a: ByteArray, o: Int, n: Int) = ByteBuffer(a, 0, a.size).also { it.pos = o; it.lim = o + n }
     }
@@ -185,4 +192,40 @@ class IntBuffer internal constructor(private val b: ByteBuffer) {
 class CharBuffer(private val s: String) : CharSequence by s {
     override fun toString() = s
     companion object { fun wrap(c: CharSequence) = CharBuffer(c.toString()) }
+}
+
+/** java.nio.FloatBuffer over native memory (a direct ByteBuffer's) or a FloatArray. */
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+class FloatBuffer internal constructor(internal val address: kotlinx.cinterop.CPointer<kotlinx.cinterop.FloatVar>?, private val cap: Int,
+    private val arr: FloatArray? = null) : Buffer() {
+    private var pos = 0
+    private var lim = cap
+    override fun capacity() = cap
+    override fun position() = pos
+    override fun limit() = lim
+    fun position(p: Int): FloatBuffer { pos = p; return this }
+    fun limit(l: Int): FloatBuffer { lim = l; return this }
+    fun flip(): FloatBuffer { lim = pos; pos = 0; return this }
+    fun rewind(): FloatBuffer { pos = 0; return this }
+    fun clear(): FloatBuffer { pos = 0; lim = cap; return this }
+    private fun rd(i: Int): Float = if (address != null) address[i] else arr!![i]
+    private fun wr(i: Int, v: Float) { if (address != null) address[i] = v else arr!![i] = v }
+    fun get(): Float = rd(pos++)
+    fun get(i: Int): Float = rd(i)
+    fun get(dst: FloatArray): FloatBuffer { for (k in dst.indices) dst[k] = get(); return this }
+    fun put(v: Float): FloatBuffer { wr(pos++, v); return this }
+    fun put(i: Int, v: Float): FloatBuffer { wr(i, v); return this }
+    fun put(src: FloatArray): FloatBuffer { for (v in src) put(v); return this }
+    fun put(src: FloatArray, off: Int, n: Int): FloatBuffer { for (k in off until off + n) put(src[k]); return this }
+    fun array(): FloatArray = arr ?: throw UnsupportedOperationException()
+    fun hasArray() = arr != null
+    fun duplicate() = FloatBuffer(address, cap, arr).also { it.pos = pos; it.lim = lim }
+    companion object {
+        fun allocate(n: Int) = FloatBuffer(kotlinx.cinterop.nativeHeap.allocArray(maxOf(n, 1)), n)
+        fun wrap(a: FloatArray): FloatBuffer {
+            val b = allocate(a.size)
+            for (k in a.indices) b.put(k, a[k])
+            return b
+        }
+    }
 }

@@ -214,6 +214,13 @@ object Arrays {
     fun fill(a: IntArray, v: Int) = a.fill(v)
     fun fill(a: IntArray, from: Int, to: Int, v: Int) = a.fill(v, from, to)
     fun fill(a: ShortArray, v: Short) = a.fill(v)
+    fun fill(a: ShortArray, from: Int, to: Int, v: Short) = a.fill(v, from, to)
+    fun fill(a: LongArray, from: Int, to: Int, v: Long) = a.fill(v, from, to)
+    fun fill(a: FloatArray, from: Int, to: Int, v: Float) = a.fill(v, from, to)
+    fun fill(a: DoubleArray, v: Double) = a.fill(v)
+    fun fill(a: BooleanArray, from: Int, to: Int, v: Boolean) = a.fill(v, from, to)
+    fun fill(a: CharArray, from: Int, to: Int, v: Char) = a.fill(v, from, to)
+    fun <T> fill(a: Array<T>, from: Int, to: Int, v: T) = a.fill(v, from, to)
     fun fill(a: LongArray, v: Long) = a.fill(v)
     fun fill(a: BooleanArray, v: Boolean) = a.fill(v)
     fun fill(a: CharArray, v: Char) = a.fill(v)
@@ -414,4 +421,12 @@ class BitSet(nbits: Int = 64) {
     fun or(o: BitSet) { if (o.words.size > words.size) words = words.copyOf(o.words.size); for (i in o.words.indices) words[i] = words[i] or o.words[i] }
     fun and(o: BitSet) { for (i in words.indices) words[i] = words[i] and (o.words.getOrElse(i) { 0L }) }
     fun toLongArray() = words.copyOf()
+}
+
+/** java.util.EnumSet: a set of an enum's values. */
+object EnumSet {
+    fun <E : Enum<E>> noneOf(c: java.lang.Class<E>): MutableSet<E> = LinkedHashSet()
+    fun <E : Enum<E>> of(e: E, vararg rest: E): MutableSet<E> = linkedSetOf(e, *rest)
+    fun <E : Enum<E>> copyOf(c: Collection<E>): MutableSet<E> = LinkedHashSet(c)
+    fun <E : Enum<E>> allOf(c: java.lang.Class<E>): MutableSet<E> = LinkedHashSet()
 }

@@ -17,9 +17,14 @@ private var registered = false
 private fun registerActivities() {
     if (registered) return
     registered = true
+    // The Application's start, as Android runs it before any activity.
+    runCatching { com.pokedaisy.app.PokeDaisyApp().onCreate() }.onFailure { it.printStackTrace() }
     ActivityHost.register("LibraryActivity") { com.pokedaisy.app.LibraryActivity() }
     ActivityHost.register("SettingsActivity") { com.pokedaisy.app.SettingsActivity() }
     ActivityHost.register("SaveEditorActivity") { com.pokedaisy.app.SaveEditorActivity() }
+    ActivityHost.register("PokeDaisyActivity") { com.pokedaisy.app.PokeDaisyActivity() }
+    ActivityHost.register("LaunchActivity") { com.pokedaisy.app.LaunchActivity() }
+    ActivityHost.register("LinkActivity") { com.pokedaisy.app.LinkActivity() }
 }
 
 /** The app as on Android: its Library first, the rest started from there. [onMissing]: a screen iOS hasn't got yet. */

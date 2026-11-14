@@ -7,6 +7,7 @@ import kotlinx.cinterop.*
 import platform.Foundation.NSDate
 import platform.Foundation.NSProcessInfo
 import platform.Foundation.timeIntervalSince1970
+import platform.Foundation.dateWithTimeIntervalSinceNow
 import platform.posix.*
 import kotlin.math.pow
 
@@ -285,6 +286,8 @@ object Character {
 abstract class Process
 
 open class LinkageError(message: String? = null) : Error(message)
+open class UnsatisfiedLinkError(message: String? = null) : LinkageError(message)
+open class NoSuchMethodException(message: String? = null) : Exception(message)
 open class NoSuchFieldException(message: String? = null) : Exception(message)
 open class ClassNotFoundException(message: String? = null) : Exception(message)
 
@@ -300,10 +303,31 @@ class Class<T>(val simpleName: String, val name: String) {
         return Field(field, v ?: throw NoSuchFieldException(field))
     }
     fun getDeclaredField(field: String) = getField(field)
+    fun getMethod(name: String, vararg types: Any?): java.lang.reflect.Method = throw NoSuchMethodException(name)
+    fun getDeclaredMethod(name: String, vararg types: Any?): java.lang.reflect.Method = throw NoSuchMethodException(name)
     val canonicalName: String get() = name
     fun getSimpleName() = simpleName
     fun getName() = name
     override fun toString() = "class $name"
     override fun equals(other: Any?) = other is Class<*> && other.name == name
     override fun hashCode() = name.hashCode()
+}
+
+/**
+ * java.lang.Object's monitor methods for objects used as locks (synchronized(lock) { lock.wait() }): wait gives up
+ * synchronized's process-wide lock while it sleeps, notify / notifyAll wake its waiters.
+ */
+open class Object {
+    private val cond = platform.Foundation.NSCondition()
+    fun wait() = wait(0L)
+    fun wait(ms: Long) {
+        cond.lock()
+        val depth = kotlin.pdLock.releaseAll()
+        if (ms <= 0) cond.wait() else cond.waitUntilDate(platform.Foundation.NSDate.dateWithTimeIntervalSinceNow(ms / 1000.0))
+        cond.unlock()
+        kotlin.pdLock.reacquire(depth)
+    }
+    fun wait(ms: Long, nanos: Int) = wait(ms)
+    fun notify() { cond.lock(); cond.signal(); cond.unlock() }
+    fun notifyAll() { cond.lock(); cond.broadcast(); cond.unlock() }
 }

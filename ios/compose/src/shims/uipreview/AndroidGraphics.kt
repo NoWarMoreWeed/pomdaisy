@@ -20,6 +20,29 @@ class Bitmap(val width: Int, val height: Int, internal val px: IntArray = IntArr
     }
 
     fun getPixel(x: Int, y: Int) = px[y * width + x]
+    /** RGBA bytes (as the GL / core frames are) into the pixels. */
+    fun copyPixelsFromBuffer(b: java.nio.Buffer) {
+        val bb = b as? java.nio.ByteBuffer ?: return
+        val n = minOf(px.size, bb.remaining() / 4)
+        val bytes = ByteArray(n * 4); bb.duplicate().get(bytes)
+        for (i in 0 until n) {
+            val o = i * 4
+            px[i] = ((bytes[o + 3].toInt() and 0xFF) shl 24) or ((bytes[o].toInt() and 0xFF) shl 16) or ((bytes[o + 1].toInt() and 0xFF) shl 8) or (bytes[o + 2].toInt() and 0xFF)
+        }
+    }
+    fun copyPixelsToBuffer(b: java.nio.Buffer) {
+        val bb = b as? java.nio.ByteBuffer ?: return
+        for (c in px) { bb.put((c shr 16).toByte()); bb.put((c shr 8).toByte()); bb.put(c.toByte()); bb.put((c ushr 24).toByte()) }
+    }
+    fun eraseColor(c: Int) { px.fill(c) }
+    val byteCount: Int get() = px.size * 4
+    val allocationByteCount: Int get() = byteCount
+    fun copy(c: Config, mutable: Boolean) = Bitmap(width, height, px.copyOf())
+    val isMutable = true
+    val isRecycled = false
+    fun hasAlpha() = true
+    fun sameAs(o: Bitmap?) = o != null && o.width == width && o.height == height && o.px.contentEquals(px)
+    var density = 160
     fun setPixel(x: Int, y: Int, c: Int) { px[y * width + x] = c }
     fun recycle() {}
     fun compress(f: CompressFormat, q: Int, s: java.io.OutputStream): Boolean = true
@@ -46,6 +69,13 @@ class Bitmap(val width: Int, val height: Int, internal val px: IntArray = IntArr
 object BitmapFactory {
     class Options {
         var inJustDecodeBounds = false
+        var inPreferredConfig: Bitmap.Config? = null
+        var inScaled = true
+        var inMutable = false
+        var inDensity = 0
+        var inTargetDensity = 0
+        var inPremultiplied = true
+        var outMimeType: String? = null
         var inSampleSize = 1
         var outWidth = 0
         var outHeight = 0

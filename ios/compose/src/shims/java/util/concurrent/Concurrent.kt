@@ -113,7 +113,41 @@ open class LinkedBlockingQueue<E>(private val capacity: Int = Int.MAX_VALUE) : A
 }
 typealias ArrayBlockingQueue<E> = LinkedBlockingQueue<E>
 typealias BlockingQueue<E> = LinkedBlockingQueue<E>
-typealias LinkedBlockingDeque<E> = LinkedBlockingQueue<E>
+
+/** A blocking deque (both ends). */
+open class LinkedBlockingDeque<E>() : AbstractMutableCollection<E>() {
+    private val q = ArrayDeque<E>()
+    private val lock = PdMutex()
+    private inline fun <R> locked(b: () -> R): R { lock.lock(); try { return b() } finally { lock.unlock() } }
+    override val size get() = locked { q.size }
+    override fun add(element: E) = locked { q.addLast(element); true }
+    fun offer(e: E) = add(e)
+    fun offerFirst(e: E) = locked { q.addFirst(e); true }
+    fun offerLast(e: E) = add(e)
+    fun addFirst(e: E) { offerFirst(e) }
+    fun addLast(e: E) { add(e) }
+    fun putFirst(e: E) { offerFirst(e) }
+    fun putLast(e: E) { add(e) }
+    fun put(e: E) { add(e) }
+    fun poll(): E? = locked { q.removeFirstOrNull() }
+    fun pollFirst(): E? = poll()
+    fun pollLast(): E? = locked { q.removeLastOrNull() }
+    fun poll(timeout: Long, unit: TimeUnit): E? {
+        val end = java.lang.System.currentTimeMillis() + unit.toMillis(timeout)
+        while (true) { poll()?.let { return it }; if (java.lang.System.currentTimeMillis() >= end) return null; java.lang.Thread.sleep(1) }
+    }
+    fun pollFirst(timeout: Long, unit: TimeUnit) = poll(timeout, unit)
+    fun take(): E { while (true) { poll()?.let { return it }; java.lang.Thread.sleep(1) } }
+    fun takeFirst(): E = take()
+    fun peek(): E? = locked { q.firstOrNull() }
+    fun peekFirst(): E? = peek()
+    fun peekLast(): E? = locked { q.lastOrNull() }
+    fun removeFirstOccurrence(o: Any?): Boolean = locked { q.remove(o) }
+    override fun remove(element: E): Boolean = locked { q.remove(element) }
+    override fun contains(element: E): Boolean = locked { q.contains(element) }
+    override fun clear() = locked { q.clear() }
+    override fun iterator(): MutableIterator<E> = locked { q.toMutableList() }.iterator()
+}
 
 enum class TimeUnit(private val nanos: Long) {
     NANOSECONDS(1), MICROSECONDS(1_000), MILLISECONDS(1_000_000), SECONDS(1_000_000_000), MINUTES(60_000_000_000), HOURS(3_600_000_000_000), DAYS(86_400_000_000_000);
@@ -282,6 +316,18 @@ class Semaphore(permits: Int) {
     fun tryAcquire(): Boolean { val v = n.value; return v > 0 && n.compareAndSet(v, v - 1) }
     fun release() { n.incrementAndGet() }
     fun availablePermits() = n.value
+    fun drainPermits(): Int { while (true) { val v = n.value; if (n.compareAndSet(v, 0)) return v } }
+    fun release(k: Int) { n.addAndGet(k) }
+    fun acquire(k: Int) { repeat(k) { acquire() } }
+    fun tryAcquire(k: Int): Boolean { while (true) { val v = n.value; if (v < k) return false; if (n.compareAndSet(v, v - k)) return true } }
+    fun tryAcquire(k: Int, timeout: Long, unit: TimeUnit): Boolean {
+        val end = java.lang.System.currentTimeMillis() + unit.toMillis(timeout)
+        while (true) { if (tryAcquire(k)) return true; if (java.lang.System.currentTimeMillis() >= end) return false; java.lang.Thread.sleep(1) }
+    }
+    fun tryAcquire(timeout: Long, unit: TimeUnit): Boolean {
+        val end = java.lang.System.currentTimeMillis() + unit.toMillis(timeout)
+        while (true) { if (tryAcquire()) return true; if (java.lang.System.currentTimeMillis() >= end) return false; java.lang.Thread.sleep(1) }
+    }
 }
 
 open class CompletableFuture<T> : Future<T> {

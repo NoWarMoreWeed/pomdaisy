@@ -53,6 +53,20 @@ object pdLock {
             mutex.unlock()
         }
     }
+    /** Lets go of the lock completely if this thread holds it (Object.wait): its depth, for reacquire. */
+    fun releaseAll(): Int {
+        if (owner.value != PdThreadId.current()) return 0
+        val d = depth
+        depth = 0
+        owner.value = 0
+        mutex.unlock()
+        return d
+    }
+    fun reacquire(d: Int) {
+        if (d <= 0) return
+        lock()
+        depth = d
+    }
 }
 
 typealias Runnable = java.lang.Runnable
@@ -65,6 +79,9 @@ typealias Character = java.lang.Character
 typealias Process = java.lang.Process
 typealias LinkageError = java.lang.LinkageError
 typealias Class<T> = java.lang.Class<T>
+typealias Object = java.lang.Object
+typealias Runtime = java.lang.Runtime
+typealias UnsatisfiedLinkError = java.lang.UnsatisfiedLinkError
 typealias CloneNotSupportedException = java.lang.CloneNotSupportedException
 typealias SecurityException = java.lang.SecurityException
 typealias StringBuffer = StringBuilder
