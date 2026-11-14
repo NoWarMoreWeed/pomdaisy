@@ -92,6 +92,7 @@ struct LibraryView: View {
     @EnvironmentObject var library: Library
     @EnvironmentObject var emulator: Emulator
     @State private var importing = false
+    @State private var androidUI = false
 
     private static var romTypes: [UTType] {
         ["gba", "gb", "gbc", "nds"].compactMap { UTType(filenameExtension: $0) } + [.data]
@@ -137,6 +138,9 @@ struct LibraryView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { importing = true } label: { Image(systemName: "plus") }
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Android-Ansicht") { androidUI = true }
+                }
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: Self.romTypes, allowsMultipleSelection: true) { result in
                 if case .success(let urls) = result {
@@ -147,6 +151,7 @@ struct LibraryView: View {
                 }
             }
             .refreshable { library.refresh() }
+            .fullScreenCover(isPresented: $androidUI) { AndroidPreview() }
             .alert(emulator.message ?? "", isPresented: Binding(
                 get: { emulator.message != nil && !emulator.running },
                 set: { if !$0 { emulator.message = nil } })) {

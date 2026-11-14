@@ -13,9 +13,17 @@ targets:
   PomDaisy:
     type: application
     platform: iOS
+    dependencies:
+      - framework: ../compose/build/bin/iosArm64/releaseFramework/PomDaisyCompose.framework
+        embed: false
+        link: true
     sources:
       - path: Sources
       - path: Assets.xcassets
+      # The Android app's assets (fonts, shaders): its Kotlin code reads them from the bundle's "assets" folder.
+      - path: ../../app/src/main/assets
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nowarmoreweed.pomdaisy
@@ -27,7 +35,9 @@ targets:
         LIBRARY_SEARCH_PATHS: "$(SRCROOT)/../../build/ios"
         # The Game Boy core (ios/core) and the two Nintendo DS cores (ios/ds: DSperate, ios/melonds: melonDS; each one
         # prelinked object, C++ inside; melonDS needs zlib).
-        OTHER_LDFLAGS: "-lpomdaisy_core $(SRCROOT)/../../build/ios-ds/pomdaisy_ds.o $(SRCROOT)/../../build/ios-md/pomdaisy_md.o -lc++ -lz"
+        OTHER_LDFLAGS: "-lpomdaisy_core $(SRCROOT)/../../build/ios-ds/pomdaisy_ds.o $(SRCROOT)/../../build/ios-md/pomdaisy_md.o -lc++ -lz -lsqlite3"
+        # The Android app's own UI (ios/compose, Compose Multiplatform): a static framework.
+        FRAMEWORK_SEARCH_PATHS: "$(SRCROOT)/../compose/build/bin/iosArm64/releaseFramework"
         GCC_C_LANGUAGE_STANDARD: gnu11
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
@@ -54,6 +64,8 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         UIStatusBarHidden: true
+        # Compose Multiplatform draws at the screen's full refresh rate (ProMotion) only with this.
+        CADisableMinimumFrameDurationOnPhone: true
         # The Documents folder shows in the Files app ("On My iPhone > PomDaisy"): ROMs can go straight into roms/.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: false

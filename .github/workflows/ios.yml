@@ -1,6 +1,6 @@
 name: iOS
 
-# PomDaisy: the iOS build. Builds the cores (mGBA + companion, ios/core; DSperate + the DS companion, ios/ds; melonDS
+# PomDaisy: the iOS build. Builds the Android app's own Kotlin / Compose UI for iOS (ios/compose), the cores (mGBA + companion, ios/core; DSperate + the DS companion, ios/ds; melonDS
 # + EXPAND, ios/melonds; all without JIT) for iPhone / iPad, generates the Xcode project
 # (ios/App/project.yml, XcodeGen) and archives the app. With the App Store Connect secrets set (ASC_KEY_ID,
 # ASC_ISSUER_ID, ASC_KEY_P8, APPLE_TEAM_ID) the archive is signed and uploaded to TestFlight; without them it's an
@@ -93,6 +93,12 @@ jobs:
           if nm -gU build/ios-ds/pomdaisy_ds.o | awk '{print $NF}' | grep -v '^_pdds_'; then
             echo "::error::pomdaisy_ds.o exports more than its pdds_* entry points"; exit 1
           fi
+      - name: The Android app's UI for iOS (Compose Multiplatform framework)
+        run: |
+          export JAVA_HOME="${JAVA_HOME_21_arm64:-${JAVA_HOME_17_arm64:-$JAVA_HOME}}"
+          java -version
+          ./gradlew -p ios/compose --no-daemon linkReleaseFrameworkIosArm64
+          ls -la ios/compose/build/bin/iosArm64/releaseFramework/
       - name: Xcode project
         working-directory: ios/App
         run: xcodegen generate
