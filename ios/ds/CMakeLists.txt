@@ -30,6 +30,9 @@ endif()
 foreach(off DSPERATE_JIT DSPERATE_VULKAN DSPERATE_GLES BUILD_TESTING)
   set(${off} OFF CACHE BOOL "" FORCE)
 endforeach()
+# An uninitialised C global (pd_dark, ui_game ...) must be a definition, not a common symbol: the prelink can't make
+# those local, and the linker would merge them with the Game Boy core's variables of the same name.
+add_compile_options(-fno-common)
 # The Linux DS core's own build: dsperate_core, the generated companion data and pd_ds_presentation. Its shared
 # library target (GNU link options) is never built here.
 add_subdirectory(${ROOT}/linux/libretro-ds lrds EXCLUDE_FROM_ALL)
