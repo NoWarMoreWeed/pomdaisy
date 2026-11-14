@@ -37,6 +37,7 @@ add_subdirectory(${ROOT}/linux/libretro-ds lrds EXCLUDE_FROM_ALL)
 # ---- what clang and Apple's toolchain need (never a change to the submodule: fixed copies in the build directory,
 # as app/src/main/cpp/nds/dsperate.cmake does for the NDK) ----
 # Replaces [from] with [to] in DSperate's src/core/[rel]; each must be there, so a moved line fails the configure.
+# (They travel as a CMake list: no semicolon and no empty string in either.)
 function(dsperate_fix rel)
   file(READ "${DS}/src/core/${rel}" text)
   set(pairs ${ARGN})
@@ -94,10 +95,10 @@ if(APPLE)
     ".previous" ".text")
   # DSperate's worker threads (2D lines, 3D bands) name themselves as they start: there they also ask for the emulation
   # thread's priority, or iOS runs them as background work on the slow cores.
-  dsperate_fix(host_cores.cpp "  (void)name;" "  (void)name;\n  pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);")
+  dsperate_fix(host_cores.cpp "(void)name" "(void)name, pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0)")
   # No getauxval on Darwin, and every arm64 iPhone has the AES instructions.
   dsperate_fix(crypto/aes.c
-    "#include <sys/auxv.h>" ""
+    "#include <sys/auxv.h>" "/* no <sys/auxv.h> on Darwin */"
     "(getauxval(AT_HWCAP) & HWCAP_AES_BIT) != 0" "1")
 endif()
 
