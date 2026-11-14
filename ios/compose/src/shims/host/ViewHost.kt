@@ -36,7 +36,12 @@ object ViewHost {
         var version by mutableIntStateOf(0)
         internal var scope: SubcomposeMeasureScope? = null
         internal val measured = HashMap<View, Measurable>()
-        fun changed() { version++ }
+        internal var laying = false
+        /** A change from outside the host's own layout pass (requestLayout from onMeasure / onLayout is part of it). */
+        fun changed() {
+            if (laying) return
+            if (platform.Foundation.NSThread.isMainThread) version++ else ActivityHost.onMain { version++ }
+        }
         /** A ComposeView's wrap_content size: its content's intrinsic size within the specs. */
         val measurer: (androidx.compose.ui.platform.ComposeView, Int, Int) -> Pair<Int, Int> = { v, ws, hs ->
             val m = measurable(v)
@@ -77,6 +82,7 @@ object ViewHost {
             val w = if (constraints.hasBoundedWidth) constraints.maxWidth else constraints.minWidth
             val h = if (constraints.hasBoundedHeight) constraints.maxHeight else constraints.minHeight
             r.scope = this
+            r.laying = true
             r.measured.clear()
             root.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY))
             root.layout(0, 0, w, h)
@@ -87,6 +93,7 @@ object ViewHost {
                 p to m?.measure(Constraints.fixed(p.view.width.coerceAtLeast(0), p.view.height.coerceAtLeast(0)))
             }
             r.scope = null
+            r.laying = false
             layout(w, h) {
                 for ((p, pl) in placeables) pl?.placeWithLayer(p.x.toInt(), p.y.toInt()) { alpha = p.alpha }
             }
