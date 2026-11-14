@@ -25,6 +25,19 @@ jobs:
       HAS_ASC: ${{ secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' && secrets.ASC_KEY_P8 != '' && secrets.APPLE_TEAM_ID != '' }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Which App Store Connect secrets are set (names only, never values)
+        env:
+          S1: ${{ secrets.ASC_KEY_ID != '' }}
+          S2: ${{ secrets.ASC_ISSUER_ID != '' }}
+          S3: ${{ secrets.ASC_KEY_P8 != '' }}
+          S4: ${{ secrets.APPLE_TEAM_ID != '' }}
+          V1: ${{ vars.ASC_KEY_ID != '' }}
+          V2: ${{ vars.ASC_ISSUER_ID != '' }}
+          V3: ${{ vars.ASC_KEY_P8 != '' }}
+          V4: ${{ vars.APPLE_TEAM_ID != '' }}
+        run: |
+          echo "secret ASC_KEY_ID=$S1 ASC_ISSUER_ID=$S2 ASC_KEY_P8=$S3 APPLE_TEAM_ID=$S4"
+          echo "variable ASC_KEY_ID=$V1 ASC_ISSUER_ID=$V2 ASC_KEY_P8=$V3 APPLE_TEAM_ID=$V4"
       - name: mGBA submodule
         run: git submodule update --init --depth 1 third_party/mgba
       - name: Tools
