@@ -8,6 +8,8 @@ name: iOS
 on:
   push:
     branches: [ios]
+    # The TestFlight feedback fetch (ios-feedback.yml) alone doesn't rebuild the app.
+    paths-ignore: [ios/feedback-request, ios/testflight_feedback.py, ios/feedback_pub.pem, .github/workflows/ios-feedback.yml]
   pull_request:
     branches: [ios]
   workflow_dispatch:

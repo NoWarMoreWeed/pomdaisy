@@ -1,0 +1,51 @@
+name: iOS TestFlight feedback
+
+# Fetches PomDaisy's newest TestFlight crash reports and screenshot feedback (ios/testflight_feedback.py) and uploads them
+# ENCRYPTED to ios/feedback_pub.pem: the repo is public and feedback carries the tester's details, so only the holder of
+# the matching private key (kept off the repo) can read the artifact. The log prints counts only.
+# A push to branch ios changing ios/feedback-request (any text) runs it too: workflow_dispatch needs the workflow on the
+# default branch.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios]
+    paths: [ios/feedback-request, ios/testflight_feedback.py, .github/workflows/ios-feedback.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  feedback:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Fetch and encrypt
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -e
+          pip install --quiet "pyjwt[crypto]==2.10.1"
+          key="$RUNNER_TEMP/AuthKey.p8"
+          raw=$(printf '%s' "$ASC_KEY_P8" | tr -d '\r')
+          if ! printf '%s' "$raw" | grep -q "BEGIN PRIVATE KEY"; then
+            decoded=$(printf '%s' "$raw" | tr -d ' \n' | base64 -d 2>/dev/null || true)
+            if printf '%s' "$decoded" | grep -q "BEGIN PRIVATE KEY"; then raw="$decoded"; fi
+          fi
+          body=$(printf '%s' "$raw" | sed -e 's/-----BEGIN PRIVATE KEY-----//' -e 's/-----END PRIVATE KEY-----//' | tr -d ' \n\t')
+          { echo "-----BEGIN PRIVATE KEY-----"; printf '%s' "$body" | fold -w 64; echo; echo "-----END PRIVATE KEY-----"; } > "$key"
+          chmod 600 "$key"
+          ASC_KEY_PATH="$key" python3 ios/testflight_feedback.py "$RUNNER_TEMP/fb"
+          rm -f "$key"
+          mkdir -p "$RUNNER_TEMP/out"
+          tar czf "$RUNNER_TEMP/fb.tgz" -C "$RUNNER_TEMP" fb
+          openssl rand 32 > "$RUNNER_TEMP/k"
+          openssl enc -aes-256-cbc -pbkdf2 -salt -pass "file:$RUNNER_TEMP/k" -in "$RUNNER_TEMP/fb.tgz" -out "$RUNNER_TEMP/out/feedback.tgz.enc"
+          openssl pkeyutl -encrypt -pubin -inkey ios/feedback_pub.pem -pkeyopt rsa_padding_mode:oaep -in "$RUNNER_TEMP/k" -out "$RUNNER_TEMP/out/key.enc"
+          rm -rf "$RUNNER_TEMP/k" "$RUNNER_TEMP/fb" "$RUNNER_TEMP/fb.tgz"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: feedback-encrypted
+          path: ${{ runner.temp }}/out
+          retention-days: 3
