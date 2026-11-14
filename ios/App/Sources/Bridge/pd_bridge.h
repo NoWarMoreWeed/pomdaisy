@@ -28,6 +28,10 @@ void pd_run(void);
 double pd_fps(void);
 /* How long the core takes for one frame, in milliseconds (a running average). Over 1000 / pd_fps() the game runs slow. */
 double pd_frame_ms(void);
+/* The slowest frame since the last call, in milliseconds (0 = none ran). */
+double pd_frame_ms_peak(void);
+/* Frames run since the game loaded: two readings a while apart give the frames per second. */
+uint64_t pd_frames_run(void);
 double pd_sample_rate(void);
 
 /* Input, from any thread. */

@@ -119,6 +119,8 @@ static bool pointerFrame;           // what the core sees this frame
 static _Atomic bool ffOn;
 static _Atomic int ffSpeed = 1;
 static _Atomic double frameMs; // the core's time for a frame, averaged
+static _Atomic double frameMsPeak; // the slowest since pd_frame_ms_peak
+static _Atomic uint64_t framesRun;
 
 void pd_set_dirs(const char *s, const char *d) {
   snprintf(systemDir, sizeof systemDir, "%s", s ? s : ".");
@@ -412,6 +414,8 @@ bool pd_load(const char *path, const void *rom, size_t size) {
   }
   core->get_system_av_info(&av);
   atomic_store(&frameMs, 0);
+  atomic_store(&frameMsPeak, 0);
+  atomic_store(&framesRun, 0);
   pthread_mutex_lock(&ringLock);
   ringRead = ringWrite = 0;
   pthread_mutex_unlock(&ringLock);
@@ -448,8 +452,13 @@ void pd_run(void) {
   double ms = (double)(b.tv_sec - a.tv_sec) * 1000 + (double)(b.tv_nsec - a.tv_nsec) / 1e6;
   double avg = atomic_load(&frameMs);
   atomic_store(&frameMs, avg > 0 ? avg + (ms - avg) / 30 : ms);
+  if (ms > atomic_load(&frameMsPeak))
+    atomic_store(&frameMsPeak, ms);
+  atomic_fetch_add(&framesRun, 1);
 }
 double pd_frame_ms(void) { return atomic_load(&frameMs); }
+double pd_frame_ms_peak(void) { return atomic_exchange(&frameMsPeak, 0); }
+uint64_t pd_frames_run(void) { return atomic_load(&framesRun); }
 double pd_fps(void) { return av.timing.fps > 0 ? av.timing.fps : 59.7275; }
 double pd_sample_rate(void) { return av.timing.sample_rate > 0 ? av.timing.sample_rate : 32768; }
 

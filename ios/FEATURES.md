@@ -97,7 +97,7 @@ geschrieben ist, muss für iOS neu gebaut werden.
 | Shader (LCD, CRT, Scanlines, GBA-Farben, Glättung) | ❌ | |
 | Rahmen / Overlays | ❌ | |
 | Themes, Dunkelmodus der App | ❌ | App ist immer dunkel |
-| Statusleiste, FPS-Anzeige | ❌ | |
+| Statusleiste, FPS-Anzeige | 🟡 | Live-Anzeige in der Ecke (Auslastung Ø / max, fps), im Pause-Menü abschaltbar; keine Statusleiste |
 | Tasten-Klick, Fanfare bei Erfolgen | ❌ | |
 
 ## Nächste Schritte (Vorschlag)

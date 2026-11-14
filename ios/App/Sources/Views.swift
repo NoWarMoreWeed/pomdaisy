@@ -162,6 +162,7 @@ struct GameView: View {
     @EnvironmentObject var emulator: Emulator
     @EnvironmentObject var gamepad: Gamepad
     @State private var menu = false
+    @AppStorage("liveStats") private var liveStats = true
 
     var body: some View {
         GeometryReader { geo in
@@ -187,6 +188,15 @@ struct GameView: View {
             }
             .overlay(alignment: portrait ? .topTrailing : .top) {
                 menuButton.padding(.top, 6).padding(.trailing, portrait ? 10 : 0)
+            }
+            // Upright: the game's top left corner. Sideways L sits there, so the bottom middle (between SELECT and START).
+            .overlay(alignment: portrait ? .topLeading : .bottom) {
+                if liveStats {
+                    LiveStats()
+                        .padding(.leading, portrait ? 8 : 0)
+                        .padding(portrait ? .top : .bottom, 6)
+                        .allowsHitTesting(false)
+                }
             }
             .overlay(alignment: .top) {
                 if let m = emulator.message {
@@ -229,8 +239,43 @@ struct GameView: View {
     }
 }
 
+/// The live reading in a corner of the game: how busy the core is (its time for a frame against the time a frame has;
+/// the average, then the slowest frame of the last half second) and the frames per second it really ran.
+struct LiveStats: View {
+    @State private var text = "…"
+    @State private var lastFrames: UInt64 = 0
+    @State private var lastTime = Date()
+    private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6).padding(.vertical, 3)
+            .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 5))
+            .onReceive(timer) { _ in update() }
+    }
+
+    private func update() {
+        let now = Date(), frames = pd_frames_run()
+        let seconds = now.timeIntervalSince(lastTime)
+        let ran = frames >= lastFrames ? frames - lastFrames : frames // a new game starts from 0
+        let frame = 1000 / pd_fps() // the time a frame has, in ms
+        let average = pd_frame_ms() / frame * 100, peak = pd_frame_ms_peak() / frame * 100
+        lastFrames = frames
+        lastTime = now
+        guard seconds > 0.1 else { return }
+        if ran == 0 {
+            text = "Pause"
+        } else {
+            text = String(format: "Ø %.0f %%  max %.0f %%  %.0f fps", average, peak, Double(ran) / seconds)
+        }
+    }
+}
+
 struct GameMenu: View {
     @EnvironmentObject var emulator: Emulator
+    @AppStorage("liveStats") private var liveStats = true
     let close: () -> Void
 
     var body: some View {
@@ -261,6 +306,7 @@ struct GameMenu: View {
                 Section {
                     // The core's time for a frame against the time a frame has: over 100 % the game runs slow.
                     LabeledContent("Auslastung", value: "\(Int((emulator.load * 100).rounded())) %")
+                    Toggle("Live-Anzeige im Spiel", isOn: $liveStats)
                 } header: {
                     Text("Leistung")
                 } footer: {
