@@ -15,6 +15,8 @@ final class TouchControlsView: UIView {
     }
 
     var style: Style = .below { didSet { setNeedsLayout(); setNeedsDisplay() } }
+    /// .below: the controls' area starts here (the game is above it, and touches there pass through to the game).
+    var reservedTop: CGFloat = 0 { didSet { if reservedTop != oldValue { setNeedsLayout() } } }
 
     private var buttons: [Button] = [
         Button(label: "A", key: Int32(PD_KEY_A), round: true, small: false),
@@ -45,7 +47,11 @@ final class TouchControlsView: UIView {
     // ---- layout ----
     override func layoutSubviews() {
         super.layoutSubviews()
-        let b = bounds.inset(by: safeAreaInsets)
+        var b = bounds.inset(by: safeAreaInsets)
+        if style == .below && reservedTop > b.minY {
+            b.size.height -= reservedTop - b.minY
+            b.origin.y = reservedTop
+        }
         let unit = min(b.width, b.height) * (style == .below ? 0.16 : 0.2)
         let pad = unit * 2.6
         func set(_ key: Int32, _ r: CGRect) {
@@ -147,7 +153,8 @@ final class TouchControlsView: UIView {
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-        style == .below || keys(at: point) != 0
+        // Only the buttons (and, below the game, the controls' own area) take touches; the rest goes to the game.
+        keys(at: point) != 0 || (style == .below && point.y > reservedTop)
     }
 
     private func update(_ touches: Set<UITouch>, ended: Bool) {
@@ -179,13 +186,16 @@ final class TouchControlsView: UIView {
 
 struct TouchControls: UIViewRepresentable {
     var style: TouchControlsView.Style
+    var reservedTop: CGFloat = 0
     func makeUIView(context: Context) -> TouchControlsView {
         let v = TouchControlsView()
         v.style = style
+        v.reservedTop = reservedTop
         return v
     }
     func updateUIView(_ view: TouchControlsView, context: Context) {
         if view.style != style { view.releaseAll(); view.style = style }
+        view.reservedTop = reservedTop
     }
     static func dismantleUIView(_ view: TouchControlsView, coordinator: ()) { view.releaseAll() }
 }

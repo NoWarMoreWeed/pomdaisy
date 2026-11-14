@@ -165,25 +165,22 @@ struct GameView: View {
     var body: some View {
         GeometryReader { geo in
             let portrait = geo.size.height > geo.size.width
-            ZStack(alignment: .topLeading) {
+            let gameH = portrait ? min(geo.size.width * 0.9, geo.size.height * 0.52) : geo.size.height
+            // One structure for both orientations (upright, a VStack of game + controls kept touches from the game):
+            // the game, then the controls over everything, which pass through every touch that isn't theirs.
+            ZStack(alignment: .top) {
                 Color.black.ignoresSafeArea()
                 if portrait {
-                    VStack(spacing: 0) {
-                        GameScreen()
-                            .frame(height: min(geo.size.width * 0.9, geo.size.height * 0.52))
-                        if gamepad.connected {
-                            Spacer()
-                        } else {
-                            TouchControls(style: .below)
-                        }
-                    }
+                    GameScreen()
+                        .frame(width: geo.size.width, height: gameH)
+                        .frame(maxHeight: .infinity, alignment: .top)
                 } else {
-                    ZStack {
-                        GameScreen().ignoresSafeArea()
-                        if !gamepad.connected {
-                            TouchControls(style: .overlay).ignoresSafeArea()
-                        }
-                    }
+                    GameScreen().ignoresSafeArea()
+                }
+                if !gamepad.connected {
+                    TouchControls(style: portrait ? .below : .overlay,
+                                  reservedTop: portrait ? geo.safeAreaInsets.top + gameH : 0)
+                        .ignoresSafeArea()
                 }
             }
             .overlay(alignment: portrait ? .topTrailing : .top) {
