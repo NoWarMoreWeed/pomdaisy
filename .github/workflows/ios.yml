@@ -41,7 +41,7 @@ jobs:
           echo "variable ASC_KEY_ID=$V1 ASC_ISSUER_ID=$V2 ASC_KEY_P8=$V3 APPLE_TEAM_ID=$V4"
       - name: Core submodules (mGBA, DSperate, melonDS)
         run: |
-          git submodule update --init --depth 1 third_party/mgba third_party/melonds
+          git submodule update --init --depth 1 third_party/mgba third_party/melonds third_party/dsperate third_party/rcheevos
           git submodule update --init --recursive --depth 1 third_party/dsperate-lr
       - name: Tools
         run: |
@@ -92,6 +92,28 @@ jobs:
           # Only the core's entry points may be visible, or its symbols meet the Game Boy core's in the app.
           if nm -gU build/ios-ds/pomdaisy_ds.o | awk '{print $NF}' | grep -v '^_pdds_'; then
             echo "::error::pomdaisy_ds.o exports more than its pdds_* entry points"; exit 1
+          fi
+      # Kotlin/Native's toolchain and Gradle's caches: the first build of the Compose framework downloads and compiles a lot.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.konan
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: kmp-${{ runner.os }}-${{ hashFiles('ios/compose/build.gradle.kts', 'ios/compose/appui/build.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: kmp-${{ runner.os }}-
+      - name: The Android app's native library for iOS (its JNI glue over ios/native's JNI)
+        run: |
+          cmake -S ios/native -B build/ios-native -G Ninja \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake --build build/ios-native --target pomdaisy_android
+          ls -la build/ios-native/pomdaisy_android.o
+          if nm -gU build/ios-native/pomdaisy_android.o | awk '{print $NF}' | grep -vE '^_(Java_|pd_jni_)'; then
+            echo "::error::pomdaisy_android.o exports more than the glue's entry points"; exit 1
           fi
       - name: The Android app's UI for iOS (Compose Multiplatform framework)
         run: |

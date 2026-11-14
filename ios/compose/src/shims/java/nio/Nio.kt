@@ -3,6 +3,12 @@
 
 package java.nio
 
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.get
+import kotlinx.cinterop.plus
+import kotlinx.cinterop.set
+import kotlinx.cinterop.usePinned
+
 class ByteOrder private constructor(private val name: String) {
     override fun toString() = name
     companion object {
@@ -23,8 +29,15 @@ abstract class Buffer {
     fun hasRemaining() = position() < limit()
 }
 
-/** java.nio.ByteBuffer over a ByteArray (heap buffers only; direct ones are heap too). */
-class ByteBuffer private constructor(private val arr: ByteArray, private val off: Int, private val cap: Int) : Buffer(), Comparable<ByteBuffer> {
+/** java.nio.ByteBuffer over a ByteArray, or (native) over memory the native code owns (the emulator's frame). */
+class ByteBuffer private constructor(private val arr: ByteArray, private val off: Int, private val cap: Int,
+    private val nat: kotlinx.cinterop.CPointer<kotlinx.cinterop.ByteVar>? = null) : Buffer(), Comparable<ByteBuffer> {
+    @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+    private fun rb(i: Int): Byte = if (nat != null) nat[i] else arr[i]
+    @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+    private fun wb(i: Int, v: Byte) { if (nat != null) nat[i] = v else arr[i] = v }
+    /** The native memory under a direct buffer (null for a heap one). */
+    val nativeAddress: kotlinx.cinterop.CPointer<kotlinx.cinterop.ByteVar>? get() = nat
     private var pos = 0
     private var lim = cap
     private var mark = -1
@@ -40,17 +53,19 @@ class ByteBuffer private constructor(private val arr: ByteArray, private val off
     fun rewind(): ByteBuffer { pos = 0; mark = -1; return this }
     fun mark(): ByteBuffer { mark = pos; return this }
     fun reset(): ByteBuffer { pos = mark; return this }
-    fun compact(): ByteBuffer { arr.copyInto(arr, off, off + pos, off + lim); pos = lim - pos; lim = cap; return this }
+    fun compact(): ByteBuffer { val b = ByteArray(lim - pos); copyOut(off + pos, b, 0, b.size); copyIn(off, b, 0, b.size); pos = lim - pos; lim = cap; return this }
     fun order(): ByteOrder = if (big) ByteOrder.BIG_ENDIAN else ByteOrder.LITTLE_ENDIAN
     fun order(o: ByteOrder): ByteBuffer { big = o == ByteOrder.BIG_ENDIAN; return this }
-    fun array(): ByteArray = arr
+    fun array(): ByteArray = if (nat == null) arr else throw UnsupportedOperationException("a direct buffer has no array")
     fun arrayOffset() = off
-    fun hasArray() = true
-    val isDirect: Boolean get() = false
+    fun hasArray() = nat == null
+    val isDirect: Boolean get() = nat != null
     fun isReadOnly() = false
-    fun duplicate(): ByteBuffer = ByteBuffer(arr, off, cap).also { it.pos = pos; it.lim = lim; it.big = big }
-    fun slice(): ByteBuffer = ByteBuffer(arr, off + pos, lim - pos).also { it.big = big }
-    fun slice(index: Int, length: Int): ByteBuffer = ByteBuffer(arr, off + index, length).also { it.big = big }
+    fun duplicate(): ByteBuffer = ByteBuffer(arr, off, cap, nat).also { it.pos = pos; it.lim = lim; it.big = big }
+    @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+    fun slice(): ByteBuffer = if (nat != null) ByteBuffer(arr, 0, lim - pos, nat + (off + pos)).also { it.big = big } else ByteBuffer(arr, off + pos, lim - pos).also { it.big = big }
+    @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+    fun slice(index: Int, length: Int): ByteBuffer = if (nat != null) ByteBuffer(arr, 0, length, nat + (off + index)).also { it.big = big } else ByteBuffer(arr, off + index, length).also { it.big = big }
     fun asReadOnlyBuffer() = duplicate()
 
     private fun ix(i: Int, n: Int): Int { if (i < 0 || i + n > lim) throw IndexOutOfBoundsException("$i+$n > $lim"); return off + i }
@@ -59,26 +74,38 @@ class ByteBuffer private constructor(private val arr: ByteArray, private val off
 
     private fun rd(i: Int, n: Int): Long {
         var v = 0L
-        if (big) for (k in 0 until n) v = (v shl 8) or (arr[i + k].toLong() and 0xFF)
-        else for (k in n - 1 downTo 0) v = (v shl 8) or (arr[i + k].toLong() and 0xFF)
+        if (big) for (k in 0 until n) v = (v shl 8) or (rb(i + k).toLong() and 0xFF)
+        else for (k in n - 1 downTo 0) v = (v shl 8) or (rb(i + k).toLong() and 0xFF)
         return v
     }
     private fun wr(i: Int, n: Int, v: Long) {
-        if (big) for (k in 0 until n) arr[i + k] = (v shr ((n - 1 - k) * 8)).toByte()
-        else for (k in 0 until n) arr[i + k] = (v shr (k * 8)).toByte()
+        if (big) for (k in 0 until n) wb(i + k, (v shr ((n - 1 - k) * 8)).toByte())
+        else for (k in 0 until n) wb(i + k, (v shr (k * 8)).toByte())
     }
 
-    fun get(): Byte = arr[next(1)]
-    fun get(i: Int): Byte = arr[ix(i, 1)]
+    fun get(): Byte = rb(next(1))
+    fun get(i: Int): Byte = rb(ix(i, 1))
     fun get(dst: ByteArray): ByteBuffer = get(dst, 0, dst.size)
-    fun get(dst: ByteArray, o: Int, n: Int): ByteBuffer { val i = next(n); arr.copyInto(dst, o, i, i + n); return this }
-    fun get(index: Int, dst: ByteArray, o: Int = 0, n: Int = dst.size): ByteBuffer { val i = ix(index, n); arr.copyInto(dst, o, i, i + n); return this }
-    fun put(b: Byte): ByteBuffer { arr[nextW(1)] = b; return this }
-    fun put(i: Int, b: Byte): ByteBuffer { arr[ix(i, 1)] = b; return this }
+    fun get(dst: ByteArray, o: Int, n: Int): ByteBuffer { val i = next(n); copyOut(i, dst, o, n); return this }
+    fun get(index: Int, dst: ByteArray, o: Int = 0, n: Int = dst.size): ByteBuffer { val i = ix(index, n); copyOut(i, dst, o, n); return this }
+    fun put(b: Byte): ByteBuffer { wb(nextW(1), b); return this }
+    fun put(i: Int, b: Byte): ByteBuffer { wb(ix(i, 1), b); return this }
     fun put(src: ByteArray): ByteBuffer = put(src, 0, src.size)
-    fun put(src: ByteArray, o: Int, n: Int): ByteBuffer { val i = nextW(n); src.copyInto(arr, i, o, o + n); return this }
+    fun put(src: ByteArray, o: Int, n: Int): ByteBuffer { val i = nextW(n); copyIn(i, src, o, n); return this }
     fun put(src: ByteBuffer): ByteBuffer { val n = src.remaining(); val b = ByteArray(n); src.get(b); return put(b) }
-    fun put(index: Int, src: ByteArray, o: Int = 0, n: Int = src.size): ByteBuffer { val i = ix(index, n); src.copyInto(arr, i, o, o + n); return this }
+    fun put(index: Int, src: ByteArray, o: Int = 0, n: Int = src.size): ByteBuffer { val i = ix(index, n); copyIn(i, src, o, n); return this }
+    @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+    private fun copyOut(i: Int, dst: ByteArray, o: Int, n: Int) {
+        if (n <= 0) return
+        if (nat == null) arr.copyInto(dst, o, i, i + n)
+        else dst.usePinned { platform.posix.memcpy(it.addressOf(o), nat + i, n.toULong()) }
+    }
+    @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+    private fun copyIn(i: Int, src: ByteArray, o: Int, n: Int) {
+        if (n <= 0) return
+        if (nat == null) src.copyInto(arr, i, o, o + n)
+        else src.usePinned { platform.posix.memcpy(nat + i, it.addressOf(o), n.toULong()) }
+    }
 
     fun getShort(): Short = rd(next(2), 2).toShort()
     fun getShort(i: Int): Short = rd(ix(i, 2), 2).toShort()
@@ -121,6 +148,8 @@ class ByteBuffer private constructor(private val arr: ByteArray, private val off
 
     companion object {
         fun allocate(n: Int) = ByteBuffer(ByteArray(n), 0, n)
+        /** A direct buffer over native memory (the JNI glue's NewDirectByteBuffer). */
+        fun native(p: kotlinx.cinterop.CPointer<kotlinx.cinterop.ByteVar>, capacity: Int) = ByteBuffer(ByteArray(0), 0, capacity, p).also { it.big = false }
         fun allocateDirect(n: Int) = allocate(n)
         fun wrap(a: ByteArray) = ByteBuffer(a, 0, a.size)
         fun wrap(a: ByteArray, o: Int, n: Int) = ByteBuffer(a, 0, a.size).also { it.pos = o; it.lim = o + n }
