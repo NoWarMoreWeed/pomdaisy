@@ -40,7 +40,7 @@ add_library(pomdaisy_core STATIC ${MGBA_SRC} ${LR}/pd_libretro.c ${LR}/pd_lr_mem
   ${LR}/pd_flight_area.c ${APP}/pk_call.c ${APP}/pk_flight.c ${APP}/pk_wide.c ${APP}/pk_wide_gb.c ${APP}/pk_gb_field.c)
 set_source_files_properties(${APP}/pk_wide.c ${APP}/pk_wide_gb.c PROPERTIES COMPILE_OPTIONS -Wno-unused-parameter)
 set_source_files_properties(${APP}/pk_wide_gb.c PROPERTIES COMPILE_DEFINITIONS PK_WIDE_GB_GLOW=1)
-set_target_properties(pomdaisy_core PROPERTIES COMPILE_DEFINITIONS "${MGBA_DEFS};${MGBA_DIR_DEFS};_GNU_SOURCE")
+set_target_properties(pomdaisy_core PROPERTIES COMPILE_DEFINITIONS "${MGBA_DEFS};${MGBA_DIR_DEFS};_GNU_SOURCE;PD_PANEL_FOLLOWS")
 target_include_directories(pomdaisy_core PRIVATE ${MGBA_INC} ${MGBA}/include ${CMAKE_CURRENT_BINARY_DIR}/mgba/include
   ${MGBA}/src/platform/libretro ${MGBA}/src ${ROOT}/3ds/core ${LX} ${APP} ${LR})
 target_include_directories(pomdaisy_core INTERFACE ${MGBA}/src/platform/libretro)

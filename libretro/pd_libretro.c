@@ -503,7 +503,26 @@ static bool maskGame;     // while an overlay is up the game sees no keys
 static int key_of(int btn) {
   return btn == PD_BTN_X ? X : btn == PD_BTN_Y ? Y : btn == PD_BTN_L2 ? L2 : btn == PD_BTN_R2 ? R2 : -1;
 }
+#ifdef PD_PANEL_FOLLOWS
+/* PomDaisy (iOS): the screen turns and the game view resizes mid-game, so a changed pokedaisy_panel is followed: the
+ * panel and the companion's canvas are worked out again, and canvas_update (every frame) picks the new canvas. A
+ * canvas never outgrows the buffers allocated at load (CWMAX x CHMAX). */
+static void canvas_for(int fw, int fh, int kind, int *w, int *h);
+static void read_options(void) {
+  const char *v = pd_option("pokedaisy_panel");
+  int w = 0, h = 0;
+  if (!v || sscanf(v, "%dx%d", &w, &h) != 2 || w <= 0 || h <= 0 || (w == panelW && h == panelH))
+    return;
+  panelW = w;
+  panelH = h;
+  int mw = 0, mh = 0;
+  canvas_for(baseGW, baseGH, CANVAS_MENU, &mw, &mh);
+  menuW = mw < CWMAX ? mw : CWMAX;
+  menuH = mh < CHMAX ? mh : CHMAX;
+}
+#else
 static void read_options(void) {} // (kept for the option-update hook: the canvas is read once at load)
+#endif
 
 static void poll_keys(void) {
   held = 0;
@@ -994,6 +1013,10 @@ static void canvas_update(bool notify) {
     h = (int)fh;
   } else if (panelW)
     canvas_for((int)fw, (int)fh, want_canvas(), &w, &h);
+#ifdef PD_PANEL_FOLLOWS
+  w = w > CWMAX ? CWMAX : w;
+  h = h > CHMAX ? CHMAX : h;
+#endif
   // Keep extra pixels available for the menu throughout gameplay. Double the game
   // pixels exactly, then draw menu text and icons directly at output resolution.
   if (PD_BE_IS_GBA() && !companion && (w < 320 || h < 240) && w <= CWMAX / 2 && h <= CHMAX / 2) {
