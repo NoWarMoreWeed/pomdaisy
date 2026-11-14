@@ -116,9 +116,19 @@ if(APPLE)
   list(TRANSFORM names PREPEND "_")
   list(JOIN names "\n" names)
   file(WRITE ${EXPORTS_LD} "${names}\n")
+  # ld wants the platform named: the deployment target and the SDK the parts were compiled with.
+  set(MIN_IOS ${CMAKE_OSX_DEPLOYMENT_TARGET})
+  if(NOT MIN_IOS)
+    set(MIN_IOS 16.0)
+  endif()
+  execute_process(COMMAND xcrun --sdk iphoneos --show-sdk-version OUTPUT_VARIABLE IOS_SDK OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(NOT IOS_SDK)
+    set(IOS_SDK ${MIN_IOS})
+  endif()
   # ld -r turns everything outside the list into private symbols, and those into local ones.
   add_custom_command(OUTPUT ${OBJ}
-    COMMAND xcrun ld -r -arch arm64 -exported_symbols_list ${EXPORTS_LD} -all_load ${PARTS} -o ${OBJ}
+    COMMAND xcrun ld -r -arch arm64 -platform_version ios ${MIN_IOS} ${IOS_SDK}
+      -exported_symbols_list ${EXPORTS_LD} -all_load ${PARTS} -o ${OBJ}
     DEPENDS pomdaisy_ds_entry pd_ds_presentation dsperate_core ${EXPORTS} VERBATIM)
 else()
   add_custom_command(OUTPUT ${OBJ}
