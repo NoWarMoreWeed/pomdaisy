@@ -71,8 +71,19 @@ jobs:
         env:
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
         run: |
-          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
-          chmod 600 "$RUNNER_TEMP/AuthKey.p8"
+          # The secret may hold the .p8 file as it is, without its BEGIN / END lines, on one line, with Windows line
+          # ends, or base64 encoded as a whole: all become the PEM file xcodebuild wants. Only shapes are logged.
+          key="$RUNNER_TEMP/AuthKey.p8"
+          raw=$(printf '%s' "$ASC_KEY_P8" | tr -d '\r')
+          if ! printf '%s' "$raw" | grep -q "BEGIN PRIVATE KEY"; then
+            decoded=$(printf '%s' "$raw" | tr -d ' \n' | base64 -D 2>/dev/null || true)
+            if printf '%s' "$decoded" | grep -q "BEGIN PRIVATE KEY"; then raw="$decoded"; fi
+          fi
+          body=$(printf '%s' "$raw" | sed -e 's/-----BEGIN PRIVATE KEY-----//' -e 's/-----END PRIVATE KEY-----//' | tr -d ' \n\t')
+          { echo "-----BEGIN PRIVATE KEY-----"; printf '%s' "$body" | fold -w 64; echo; echo "-----END PRIVATE KEY-----"; } > "$key"
+          chmod 600 "$key"
+          echo "key secret: $(printf '%s' "$ASC_KEY_P8" | wc -c | tr -d ' ') chars, header in secret: $(printf '%s' "$ASC_KEY_P8" | grep -c 'BEGIN PRIVATE KEY'), body: ${#body} chars"
+          if openssl pkey -in "$key" -noout 2>/dev/null; then echo "key: a valid private key"; else echo "::error::ASC_KEY_P8 is not the contents of an App Store Connect .p8 key"; exit 1; fi
       - name: Archive (signed)
         if: env.HAS_ASC == 'true'
         working-directory: ios/App
