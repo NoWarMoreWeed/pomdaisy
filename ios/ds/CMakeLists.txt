@@ -106,7 +106,9 @@ if(APPLE)
 endif()
 
 # ---- the core's entry points under names of their own, then the prelink ----
-add_library(pomdaisy_ds_entry STATIC pd_ds_entry.cpp ${ROOT}/linux/libretro-ds/pd_ds_libretro.cpp ${APP}/pk_nds_call.cpp)
+# (pd_ds_entry.cpp includes linux/libretro-ds/pd_ds_libretro.cpp: one translation unit.)
+add_library(pomdaisy_ds_entry STATIC pd_ds_entry.cpp ${APP}/pk_nds_call.cpp)
+set_property(SOURCE pd_ds_entry.cpp APPEND PROPERTY OBJECT_DEPENDS ${ROOT}/linux/libretro-ds/pd_ds_libretro.cpp)
 target_include_directories(pomdaisy_ds_entry PRIVATE ${LR} ${LR}/include ${DS}/src)
 target_link_libraries(pomdaisy_ds_entry PRIVATE pd_ds_presentation dsperate_core)
 

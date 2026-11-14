@@ -168,11 +168,27 @@ struct GameView: View {
         GeometryReader { geo in
             let portrait = geo.size.height > geo.size.width
             let gameH = portrait ? min(geo.size.width * 0.9, geo.size.height * 0.52) : geo.size.height
+            let insets = geo.safeAreaInsets
+            let full = CGSize(width: geo.size.width + insets.leading + insets.trailing,
+                              height: geo.size.height + insets.top + insets.bottom)
+            let ds = DSLayout(full: full, insets: insets, portrait: portrait)
             // One structure for both orientations (upright, a VStack of game + controls kept touches from the game):
             // the game, then the controls over everything, which pass through every touch that isn't theirs.
             ZStack(alignment: .top) {
                 Color.black.ignoresSafeArea()
-                if portrait {
+                if emulator.isDS {
+                    // Both DS screens, placed in the whole screen's coordinates.
+                    ZStack {
+                        Color.clear
+                        GameScreen()
+                            .frame(width: ds.top.width, height: ds.top.height)
+                            .position(x: ds.top.midX, y: ds.top.midY)
+                        GameScreen(kind: .dsTouch)
+                            .frame(width: ds.touch.width, height: ds.touch.height)
+                            .position(x: ds.touch.midX, y: ds.touch.midY)
+                    }
+                    .ignoresSafeArea()
+                } else if portrait {
                     GameScreen()
                         .frame(width: geo.size.width, height: gameH)
                         .frame(maxHeight: .infinity, alignment: .top)
@@ -180,10 +196,14 @@ struct GameView: View {
                     GameScreen().ignoresSafeArea()
                 }
                 if !gamepad.connected {
-                    TouchControls(style: portrait ? .below : .overlay,
-                                  reservedTop: portrait ? geo.safeAreaInsets.top + gameH : 0,
-                                  ds: emulator.isDS)
-                        .ignoresSafeArea()
+                    if emulator.isDS {
+                        TouchControls(style: portrait ? .dsBelow : .dsSide, panel: ds.controls)
+                            .ignoresSafeArea()
+                    } else {
+                        TouchControls(style: portrait ? .below : .overlay,
+                                      reservedTop: portrait ? geo.safeAreaInsets.top + gameH : 0)
+                            .ignoresSafeArea()
+                    }
                 }
             }
             .overlay(alignment: portrait ? .topTrailing : .top) {

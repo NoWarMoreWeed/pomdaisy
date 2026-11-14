@@ -4,7 +4,9 @@ import UIKit
 /// The on-screen buttons. One UIView takes every finger itself (several at once, sliding from button to button), so
 /// D-pad + A + B can be held together. Touches that hit no button fall through to the game below (overlay mode).
 final class TouchControlsView: UIView {
-    enum Style { case below, overlay }
+    /// `.below` / `.overlay`: a Game Boy game upright / sideways. `.dsBelow` / `.dsSide`: a Nintendo DS game, whose
+    /// buttons go into `panel` (the room DSLayout leaves beside its two screens).
+    enum Style { case below, overlay, dsBelow, dsSide }
 
     struct Button {
         let label: String
@@ -14,20 +16,21 @@ final class TouchControlsView: UIView {
         let small: Bool
     }
 
-    var style: Style = .below { didSet { setNeedsLayout(); setNeedsDisplay() } }
-    /// .below: the controls' area starts here (the game is above it, and touches there pass through to the game).
-    var reservedTop: CGFloat = 0 { didSet { if reservedTop != oldValue { setNeedsLayout() } } }
-
-    /// A Nintendo DS game: X and Y are the game's own (four face buttons in a diamond), and the DS core's buttons are
-    /// L2 (a tap: the companion, held: the quick menu) and R2 (which DS screen shows).
-    var ds = false {
+    var style: Style = .below {
         didSet {
-            guard ds != oldValue else { return }
-            buttons = Self.makeButtons(ds: ds)
+            if ds != (oldValue == .dsBelow || oldValue == .dsSide) { buttons = Self.makeButtons(ds: ds) }
             setNeedsLayout()
             setNeedsDisplay()
         }
     }
+    /// A DS game's room for its buttons, in this view's coordinates (the whole screen).
+    var panel = CGRect.zero { didSet { if panel != oldValue { setNeedsLayout() } } }
+    /// .below: the controls' area starts here (the game is above it, and touches there pass through to the game).
+    var reservedTop: CGFloat = 0 { didSet { if reservedTop != oldValue { setNeedsLayout() } } }
+
+    /// A Nintendo DS game: X and Y are the game's own (four face buttons in a diamond), and the DS core's button is
+    /// L2 (a tap: the companion, held: the quick menu).
+    private var ds: Bool { style == .dsBelow || style == .dsSide }
 
     private static func makeButtons(ds: Bool) -> [Button] {
         var b = [
@@ -43,7 +46,6 @@ final class TouchControlsView: UIView {
                 Button(label: "X", key: Int32(PD_KEY_X), round: true, small: false),
                 Button(label: "Y", key: Int32(PD_KEY_Y), round: true, small: false),
                 Button(label: "BEGLEITER", key: Int32(PD_KEY_L2), round: false, small: true),
-                Button(label: "BILDSCHIRM", key: Int32(PD_KEY_R2), round: false, small: true),
             ]
         } else {
             // The Game Boy core's own buttons: X opens the companion, Y the quick menu.
@@ -79,37 +81,69 @@ final class TouchControlsView: UIView {
             b.size.height -= reservedTop - b.minY
             b.origin.y = reservedTop
         }
-        let unit = min(b.width, b.height) * (style == .below ? 0.16 : 0.2)
-        let pad = unit * 2.6
         func set(_ key: Int32, _ r: CGRect) {
             if let i = buttons.firstIndex(where: { $0.key == key }) { buttons[i].rect = r }
         }
-        let face = unit * (ds ? 0.86 : 1.1), shoulderW = unit * 1.6, shoulderH = unit * 0.55
-        let smallW = unit * 1.45, smallH = unit * 0.45
-        // The core's two buttons: the Game Boy core's are X / Y, the DS core's L2 / R2.
-        let coreLeft = Int32(ds ? PD_KEY_L2 : PD_KEY_X), coreRight = Int32(ds ? PD_KEY_R2 : PD_KEY_Y)
-        // The face buttons: A right and B below-left of it (Game Boy), or the DS's diamond round (cx, cy).
-        func faces(right: CGFloat, midY: CGFloat) {
-            if ds {
-                let cx = right - face * 1.5, cy = midY - face * 0.2 // clear of START / SELECT below
-                func at(_ dx: CGFloat, _ dy: CGFloat) -> CGRect {
-                    CGRect(x: cx + dx * face - face / 2, y: cy + dy * face - face / 2, width: face, height: face)
-                }
-                set(Int32(PD_KEY_A), at(1, 0))
-                set(Int32(PD_KEY_B), at(0, 1))
-                set(Int32(PD_KEY_X), at(0, -1))
-                set(Int32(PD_KEY_Y), at(-1, 0))
-            } else {
-                let ax = right - face, ay = midY - face * 0.95
-                set(Int32(PD_KEY_A), CGRect(x: ax, y: ay, width: face, height: face))
-                set(Int32(PD_KEY_B), CGRect(x: ax - face * 1.25, y: ay + face * 0.8, width: face, height: face))
+        // The DS's four face buttons round (cx, cy).
+        func diamond(_ cx: CGFloat, _ cy: CGFloat, _ face: CGFloat) {
+            func at(_ dx: CGFloat, _ dy: CGFloat) -> CGRect {
+                CGRect(x: cx + dx * face - face / 2, y: cy + dy * face - face / 2, width: face, height: face)
             }
+            set(Int32(PD_KEY_A), at(1, 0))
+            set(Int32(PD_KEY_B), at(0, 1))
+            set(Int32(PD_KEY_X), at(0, -1))
+            set(Int32(PD_KEY_Y), at(-1, 0))
         }
+        if style == .dsBelow {
+            // Under the two screens: L, BEGLEITER, R in a row, then the D-pad, SELECT / START and the face buttons.
+            let p = panel.insetBy(dx: 12, dy: 6)
+            let rowH = min(30, p.height * 0.18), shoulderW = p.width * 0.22
+            set(Int32(PD_KEY_L), CGRect(x: p.minX, y: p.minY, width: shoulderW, height: rowH))
+            set(Int32(PD_KEY_R), CGRect(x: p.maxX - shoulderW, y: p.minY, width: shoulderW, height: rowH))
+            set(Int32(PD_KEY_L2), CGRect(x: p.midX - p.width * 0.14, y: p.minY, width: p.width * 0.28, height: rowH))
+            let top = p.minY + rowH + 8, room = p.maxY - top
+            let size = max(60, min(room, p.width * 0.36)), midY = top + room / 2
+            dpad = CGRect(x: p.minX, y: midY - size / 2, width: size, height: size)
+            let face = size / 3
+            diamond(p.maxX - face * 1.5, midY, face)
+            let gap = p.width - size * 2
+            let smallW = max(40, min(96, gap - 24)), smallH = min(30, room * 0.22)
+            set(Int32(PD_KEY_SELECT), CGRect(x: p.midX - smallW / 2, y: midY - smallH - 4, width: smallW, height: smallH))
+            set(Int32(PD_KEY_START), CGRect(x: p.midX - smallW / 2, y: midY + 4, width: smallW, height: smallH))
+            setNeedsDisplay()
+            return
+        }
+        if style == .dsSide {
+            // Under the touch screen: R, BEGLEITER, SELECT, START in two rows, the face buttons right of them. The
+            // D-pad and L lie over the top screen's left side.
+            let p = panel
+            let face = max(36, min(p.height / 3, 56))
+            diamond(p.maxX - face * 1.5, p.midY, face)
+            let gridW = p.width - face * 3 - 10
+            let cellW = (gridW - 8) / 2, cellH = min(36, (p.height - 8) / 2)
+            let y0 = p.midY - cellH - 4, y1 = p.midY + 4
+            set(Int32(PD_KEY_R), CGRect(x: p.minX, y: y0, width: cellW, height: cellH))
+            set(Int32(PD_KEY_L2), CGRect(x: p.minX + cellW + 8, y: y0, width: cellW, height: cellH))
+            set(Int32(PD_KEY_SELECT), CGRect(x: p.minX, y: y1, width: cellW, height: cellH))
+            set(Int32(PD_KEY_START), CGRect(x: p.minX + cellW + 8, y: y1, width: cellW, height: cellH))
+            let left = safeAreaInsets.left * 0.5 + 14
+            let size = min(bounds.height * 0.42, 180)
+            dpad = CGRect(x: left, y: bounds.maxY - safeAreaInsets.bottom - size - 10, width: size, height: size)
+            set(Int32(PD_KEY_L), CGRect(x: left, y: bounds.minY + 16, width: cellW, height: cellH))
+            setNeedsDisplay()
+            return
+        }
+        let unit = min(b.width, b.height) * (style == .below ? 0.16 : 0.2)
+        let pad = unit * 2.6
+        let face = unit * 1.1, shoulderW = unit * 1.6, shoulderH = unit * 0.55
+        let smallW = unit * 1.45, smallH = unit * 0.45
         switch style {
         case .below:
             let midY = b.minY + b.height * 0.48
             dpad = CGRect(x: b.minX + unit * 0.4, y: midY - pad / 2, width: pad, height: pad)
-            faces(right: b.maxX - unit * 0.4, midY: midY)
+            let ax = b.maxX - unit * 0.4 - face, ay = midY - face * 0.95
+            set(Int32(PD_KEY_A), CGRect(x: ax, y: ay, width: face, height: face))
+            set(Int32(PD_KEY_B), CGRect(x: ax - face * 1.25, y: ay + face * 0.8, width: face, height: face))
             set(Int32(PD_KEY_L), CGRect(x: b.minX + unit * 0.3, y: b.minY + unit * 0.15, width: shoulderW, height: shoulderH))
             set(Int32(PD_KEY_R), CGRect(x: b.maxX - unit * 0.3 - shoulderW, y: b.minY + unit * 0.15, width: shoulderW, height: shoulderH))
             let by = b.maxY - smallH - unit * 0.35
@@ -117,26 +151,29 @@ final class TouchControlsView: UIView {
             set(Int32(PD_KEY_START), CGRect(x: b.midX + unit * 0.15, y: by, width: smallW, height: smallH))
             // The core's buttons go in a row of their own under the shoulders (beside them they overlapped L / R).
             let ty = b.minY + unit * 0.15 + shoulderH + unit * 0.3
-            set(coreLeft, CGRect(x: b.midX - smallW - unit * 0.15, y: ty, width: smallW, height: smallH))
-            set(coreRight, CGRect(x: b.midX + unit * 0.15, y: ty, width: smallW, height: smallH))
-        case .overlay:
+            set(Int32(PD_KEY_X), CGRect(x: b.midX - smallW - unit * 0.15, y: ty, width: smallW, height: smallH))
+            set(Int32(PD_KEY_Y), CGRect(x: b.midX + unit * 0.15, y: ty, width: smallW, height: smallH))
+        default:
             let midY = b.minY + b.height * 0.58
             dpad = CGRect(x: b.minX + unit * 0.3, y: midY - pad / 2, width: pad, height: pad)
-            faces(right: b.maxX - unit * 0.3, midY: midY)
+            let ax = b.maxX - unit * 0.3 - face, ay = midY - face * 0.95
+            set(Int32(PD_KEY_A), CGRect(x: ax, y: ay, width: face, height: face))
+            set(Int32(PD_KEY_B), CGRect(x: ax - face * 1.25, y: ay + face * 0.8, width: face, height: face))
             set(Int32(PD_KEY_L), CGRect(x: b.minX + unit * 0.2, y: b.minY + unit * 0.2, width: shoulderW, height: shoulderH))
             set(Int32(PD_KEY_R), CGRect(x: b.maxX - unit * 0.2 - shoulderW, y: b.minY + unit * 0.2, width: shoulderW, height: shoulderH))
             let by = b.maxY - smallH - unit * 0.15
             set(Int32(PD_KEY_SELECT), CGRect(x: b.minX + unit * 0.3, y: by, width: smallW, height: smallH))
             set(Int32(PD_KEY_START), CGRect(x: b.maxX - unit * 0.3 - smallW, y: by, width: smallW, height: smallH))
-            set(coreLeft, CGRect(x: b.minX + unit * 0.3, y: b.minY + unit * 0.95, width: smallW, height: smallH))
-            set(coreRight, CGRect(x: b.maxX - unit * 0.3 - smallW, y: b.minY + unit * 0.95, width: smallW, height: smallH))
+            set(Int32(PD_KEY_X), CGRect(x: b.minX + unit * 0.3, y: b.minY + unit * 0.95, width: smallW, height: smallH))
+            set(Int32(PD_KEY_Y), CGRect(x: b.maxX - unit * 0.3 - smallW, y: b.minY + unit * 0.95, width: smallW, height: smallH))
         }
         setNeedsDisplay()
     }
 
     // ---- drawing ----
     override func draw(_ rect: CGRect) {
-        let alpha: CGFloat = style == .overlay ? 0.35 : 0.85
+        // Over the game the buttons are faint; a DS game sideways has only its D-pad and L there.
+        let alpha: CGFloat = style == .overlay ? 0.35 : style == .dsSide ? 0.5 : 0.85
         let fill = UIColor(white: 1, alpha: alpha * 0.25), stroke = UIColor(white: 1, alpha: alpha)
         let down = UIColor(white: 1, alpha: alpha * 0.7)
         // D-pad: a cross
@@ -196,7 +233,7 @@ final class TouchControlsView: UIView {
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         // Only the buttons (and, below the game, the controls' own area) take touches; the rest goes to the game.
-        keys(at: point) != 0 || (style == .below && point.y > reservedTop)
+        keys(at: point) != 0 || (style == .below && point.y > reservedTop) || (ds && panel.contains(point))
     }
 
     private func update(_ touches: Set<UITouch>, ended: Bool) {
@@ -229,18 +266,18 @@ final class TouchControlsView: UIView {
 struct TouchControls: UIViewRepresentable {
     var style: TouchControlsView.Style
     var reservedTop: CGFloat = 0
-    var ds = false
+    var panel = CGRect.zero
     func makeUIView(context: Context) -> TouchControlsView {
         let v = TouchControlsView()
-        v.ds = ds
         v.style = style
         v.reservedTop = reservedTop
+        v.panel = panel
         return v
     }
     func updateUIView(_ view: TouchControlsView, context: Context) {
         if view.style != style { view.releaseAll(); view.style = style }
-        if view.ds != ds { view.releaseAll(); view.ds = ds }
         view.reservedTop = reservedTop
+        view.panel = panel
     }
     static func dismantleUIView(_ view: TouchControlsView, coordinator: ()) { view.releaseAll() }
 }

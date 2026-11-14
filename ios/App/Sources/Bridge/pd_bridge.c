@@ -116,6 +116,8 @@ static _Atomic int pointerX, pointerY;
 static _Atomic bool pointerDown;
 static _Atomic bool pointerPressed; // a press since the last frame: held for the core at least one frame (a quick tap)
 static bool pointerFrame;           // what the core sees this frame
+static _Atomic int penX, penY;      // the DS pen, in the touch screen's pixels
+static _Atomic bool penDown, penPressed;
 static _Atomic bool ffOn;
 static _Atomic int ffSpeed = 1;
 static _Atomic double frameMs; // the core's time for a frame, averaged
@@ -133,6 +135,13 @@ void pd_set_pointer(int x, int y, bool down) {
   atomic_store(&pointerDown, down);
   if (down)
     atomic_store(&pointerPressed, true);
+}
+void pd_set_pen(int x, int y, bool down) {
+  atomic_store(&penX, x);
+  atomic_store(&penY, y);
+  atomic_store(&penDown, down);
+  if (down)
+    atomic_store(&penPressed, true);
 }
 void pd_set_panel(int w, int h) {
   char v[32];
@@ -297,6 +306,31 @@ static void video_refresh(const void *data, unsigned w, unsigned h, size_t pitch
   pthread_mutex_unlock(&frameLock);
 }
 
+/* The DS's touch screen, copied after each frame. */
+#define TOUCH_W 256
+#define TOUCH_H 192
+static uint32_t touchBuf[TOUCH_W * TOUCH_H];
+static uint64_t touchSerial;
+static void touch_grab(void) {
+  const uint32_t *p = pdds_touch_screen();
+  if (!p)
+    return;
+  pthread_mutex_lock(&frameLock);
+  if (!touchSerial || memcmp(touchBuf, p, sizeof touchBuf)) {
+    memcpy(touchBuf, p, sizeof touchBuf);
+    touchSerial++;
+  }
+  pthread_mutex_unlock(&frameLock);
+}
+uint64_t pd_touch_copy(uint64_t have, void *out) {
+  pthread_mutex_lock(&frameLock);
+  uint64_t serial = touchSerial;
+  if (serial && serial != have && out)
+    memcpy(out, touchBuf, sizeof touchBuf);
+  pthread_mutex_unlock(&frameLock);
+  return serial;
+}
+
 uint64_t pd_frame_copy(uint64_t have, void *out, int maxW, int maxH, int *w, int *h) {
   pthread_mutex_lock(&frameLock);
   uint64_t serial = frameSerial;
@@ -386,6 +420,8 @@ bool pd_load(const char *path, const void *rom, size_t size) {
   optionN = 0; // each core declares its own
   pthread_mutex_unlock(&optionLock);
   pixelFormat = RETRO_PIXEL_FORMAT_0RGB1555;
+  if (core == &dsCore)
+    pdds_host_screens(true);
   core->set_environment(environment);
   core->set_video_refresh(video_refresh);
   core->set_audio_sample(audio_sample);
@@ -430,7 +466,10 @@ void pd_unload(void) {
   free(romCopy);
   romCopy = NULL;
   loaded = false;
+  atomic_store(&penDown, false);
+  atomic_store(&penPressed, false);
   pthread_mutex_lock(&frameLock);
+  touchSerial = 0;
   frameSerial = 0;
   pthread_mutex_unlock(&frameLock);
 }
@@ -445,10 +484,14 @@ void pd_run(void) {
   pointerFrame = atomic_load(&pointerDown) || atomic_exchange(&pointerPressed, false);
   if (!loaded)
     return;
+  if (core == &dsCore) // a quick tap is one frame down, as the pointer's
+    pdds_set_pen(atomic_load(&penDown) || atomic_exchange(&penPressed, false), atomic_load(&penX), atomic_load(&penY));
   struct timespec a, b;
   clock_gettime(CLOCK_MONOTONIC, &a);
   core->run();
   clock_gettime(CLOCK_MONOTONIC, &b);
+  if (core == &dsCore)
+    touch_grab();
   double ms = (double)(b.tv_sec - a.tv_sec) * 1000 + (double)(b.tv_nsec - a.tv_nsec) / 1e6;
   double avg = atomic_load(&frameMs);
   atomic_store(&frameMs, avg > 0 ? avg + (ms - avg) / 30 : ms);

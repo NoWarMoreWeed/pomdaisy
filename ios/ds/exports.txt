@@ -16,3 +16,6 @@ pdds_serialize
 pdds_unserialize
 pdds_get_memory_data
 pdds_get_memory_size
+pdds_host_screens
+pdds_set_pen
+pdds_touch_screen

@@ -3,7 +3,13 @@ import UIKit
 
 /// Shows the core's newest frame (nearest-neighbour, kept in its shape) and passes touches on it to the core as the
 /// libretro pointer (the companion takes taps). Tells the core its size, so it picks its canvas for it.
+///
+/// A Nintendo DS game has two of these: the game's frame (the top screen, with the HUD, the companion and the quick
+/// menu) and `.dsTouch`, the DS's touch screen, where the finger is the pen.
 final class GameScreenView: UIView {
+    enum Kind { case game, dsTouch }
+    var kind = Kind.game
+
     private static let maxW = 1280, maxH = 960
     private let buffer = UnsafeMutableRawPointer.allocate(byteCount: maxW * maxH * 4, alignment: 16)
     private var serial: UInt64 = 0
@@ -76,7 +82,7 @@ final class GameScreenView: UIView {
         super.layoutSubviews()
         let scale = window?.screen.scale ?? UIScreen.main.scale
         let px = CGSize(width: (bounds.width * scale).rounded(), height: (bounds.height * scale).rounded())
-        if px != lastPanel, px.width > 0, px.height > 0 {
+        if kind == .game, px != lastPanel, px.width > 0, px.height > 0 {
             lastPanel = px
             Emulator.shared.setPanel(width: Int(px.width), height: Int(px.height))
         }
@@ -84,7 +90,14 @@ final class GameScreenView: UIView {
 
     @objc private func tick() {
         var w: Int32 = 0, h: Int32 = 0
-        let s = pd_frame_copy(serial, buffer, Int32(Self.maxW), Int32(Self.maxH), &w, &h)
+        let s: UInt64
+        if kind == .dsTouch {
+            s = pd_touch_copy(serial, buffer)
+            w = 256
+            h = 192
+        } else {
+            s = pd_frame_copy(serial, buffer, Int32(Self.maxW), Int32(Self.maxH), &w, &h)
+        }
         guard s != 0, s != serial, w > 0, h > 0 else { return }
         serial = s
         let bytes = Int(w) * Int(h) * 4
@@ -113,6 +126,11 @@ final class GameScreenView: UIView {
     private func pointer(at p: CGPoint, down: Bool) {
         let r = frameRect
         guard r.width > 0, r.height > 0 else { return }
+        if kind == .dsTouch { // the pen, in the touch screen's own pixels
+            let px = Int((p.x - r.minX) * 256 / r.width), py = Int((p.y - r.minY) * 192 / r.height)
+            pd_set_pen(Int32(max(0, min(255, px))), Int32(max(0, min(191, py))), down)
+            return
+        }
         let x = Int((p.x - r.minX) * 0xFFFE / r.width) - 0x7FFF
         let y = Int((p.y - r.minY) * 0xFFFE / r.height) - 0x7FFF
         pd_set_pointer(Int32(x), Int32(y), down)
@@ -121,6 +139,41 @@ final class GameScreenView: UIView {
 }
 
 struct GameScreen: UIViewRepresentable {
-    func makeUIView(context: Context) -> GameScreenView { GameScreenView() }
+    var kind = GameScreenView.Kind.game
+    func makeUIView(context: Context) -> GameScreenView {
+        let v = GameScreenView()
+        v.kind = kind
+        return v
+    }
     func updateUIView(_ view: GameScreenView, context: Context) {}
+}
+
+/// Where a Nintendo DS game's two screens and its buttons go, in the coordinates of the whole screen.
+/// Upright: the two screens one over the other at the top, as on the console, the buttons under them. Sideways: the
+/// top screen large on the left, the touch screen beside it top right, the buttons under the touch screen (the
+/// D-pad and L lie over the top screen's left side).
+struct DSLayout {
+    let top: CGRect, touch: CGRect, controls: CGRect
+
+    init(full: CGSize, insets: EdgeInsets, portrait: Bool) {
+        if portrait {
+            let room = full.height - insets.top - insets.bottom
+            let h = max(60, min(full.width * 0.75, (room - 190) / 2))
+            let w = h * 4 / 3, x = (full.width - w) / 2
+            top = CGRect(x: x, y: insets.top, width: w, height: h)
+            touch = CGRect(x: x, y: top.maxY, width: w, height: h)
+            controls = CGRect(x: 0, y: touch.maxY, width: full.width, height: full.height - insets.bottom - touch.maxY)
+        } else {
+            // Half the side insets: the picture may reach a little under the rounded corners, not far.
+            let left = insets.leading * 0.5, right = insets.trailing * 0.5
+            let room = full.width - left - right
+            let topH = min(full.height, room * 0.62 * 0.75), topW = topH * 4 / 3
+            let touchW = room - topW, touchH = touchW * 0.75
+            let y = (full.height - topH) / 2
+            top = CGRect(x: left, y: y, width: topW, height: topH)
+            touch = CGRect(x: top.maxX, y: y, width: touchW, height: touchH)
+            controls = CGRect(x: touch.minX + 6, y: touch.maxY + 6, width: touchW - 6,
+                              height: full.height - insets.bottom - touch.maxY - 10)
+        }
+    }
 }

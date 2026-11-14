@@ -106,6 +106,10 @@ bool select_used=false, select_pulse=false;
 unsigned old_buttons=0, buttons=0, tick=0, width=256, height=192;
 int screen_override=0, cursor_x=128, cursor_y=96;
 int layout=0; // 0 top, 1 bottom, 2 side by side, 3 stacked
+// A host that shows the touch screen itself, beside the stage (PomDaisy on iOS, ios/ds/pd_ds_entry.cpp): the stage is
+// the top screen alone, the battle strip stays off, and the pen comes from the host in the touch screen's own pixels.
+bool hostScreens=false,hostPenDown=false;
+int hostPenX=0,hostPenY=0;
 uint16_t pixels[512*384];
 uint32_t ui_pixels[341*256];
 
@@ -130,7 +134,7 @@ void clear_battle() {
   battleHeld=0;holdStrip=restoreGrace=0;battleActive=injectBattleTap=wasInBattle=false;
 }
 bool wants_strip() {
-  return game && battleStyle && shell.battleStrip && shell.layout==DS_ONE && !screen_override &&
+  return !hostScreens && game && battleStyle && shell.battleStrip && shell.layout==DS_ONE && !screen_override &&
     !manualTouch && !companion && !quickOpen;
 }
 DsBattleView battle_view(int bits) {
@@ -280,7 +284,7 @@ void choose_layout() {
     displayBits&=~(PK_NDS_FIELD_TOUCH|PK_NDS_FIELD_TOUCH_BATTLE_MENU);
   // PIP already exposes the native battle panel; it must not float twice.
   scene.tick(displayBits,topBlank,bottomBlank,!battleActive&&(shell.autoBattles||wants_strip())&&shell.layout!=DS_PIP);
-  int mode=screen_override==1?DS_BOTTOM:screen_override==2?DS_TOP:shell.layout;
+  int mode=hostScreens?DS_TOP:screen_override==1?DS_BOTTOM:screen_override==2?DS_TOP:shell.layout;
   arrangement=ds_arrange(mode,scene,game!=nullptr,manualTouch&&screen_override==0);
   if(mode==DS_ONE&&!manualTouch&&game&&!supported){
     arrangement=ds_arrange_one_screen(arrangement,scene,bits,topBlank,fieldValid,fieldMenuFlow);
@@ -771,6 +775,11 @@ int16_t filtered_input(unsigned p,unsigned d,unsigned i,unsigned id) {
       if(id==RETRO_DEVICE_ID_POINTER_PRESSED)return battleTap.down;
       if(id==RETRO_DEVICE_ID_POINTER_X)return (battleTap.x*65535+255)/256-32767;
       if(id==RETRO_DEVICE_ID_POINTER_Y)return (battleTap.y*32768+191)/192;
+    }
+    if(hostScreens) {
+      if(id==RETRO_DEVICE_ID_POINTER_PRESSED)return hostPenDown;
+      if(id==RETRO_DEVICE_ID_POINTER_X)return (hostPenX*65535+255)/256-32767;
+      if(id==RETRO_DEVICE_ID_POINTER_Y)return (hostPenY*32768+191)/192;
     }
     int x=input(p,d,i,RETRO_DEVICE_ID_POINTER_X),y=input(p,d,i,RETRO_DEVICE_ID_POINTER_Y);
     auto pen=ds_pen(arrangement,(x+32767)*512/65535,(y+32767)*384/65535);

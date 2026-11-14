@@ -38,6 +38,12 @@ double pd_sample_rate(void);
 void pd_set_keys(uint32_t mask);
 /* The pointer in libretro's range (-0x7FFF..0x7FFF over the frame). */
 void pd_set_pointer(int x, int y, bool down);
+/* A DS game's touch screen is shown by the app itself, beside the game's frame (which is then the top screen alone,
+ * with the HUD, the companion and the quick menu). Its newest picture, 256 x 192, as pd_frame_copy gives the frame
+ * (out holds 256 * 192 * 4 bytes); 0 with no DS game. */
+uint64_t pd_touch_copy(uint64_t have, void *out);
+/* The pen on the touch screen, in its pixels (0..255, 0..191). From any thread. */
+void pd_set_pen(int x, int y, bool down);
 /* The screen area the game is shown in, in pixels: the core picks its canvas for it (pokedaisy_panel). */
 void pd_set_panel(int w, int h);
 void pd_set_fast_forward(bool on, int speed);

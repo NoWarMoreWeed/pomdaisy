@@ -25,6 +25,12 @@ bool pdds_serialize(void *data, size_t size);
 bool pdds_unserialize(const void *data, size_t size);
 void *pdds_get_memory_data(unsigned id);
 size_t pdds_get_memory_size(unsigned id);
+/* The host shows the DS's touch screen itself: the core's frame is then the top screen alone. Before pdds_load_game. */
+void pdds_host_screens(bool on);
+/* The pen on the touch screen, in its pixels (0..255, 0..191). Before a frame, on the core's thread. */
+void pdds_set_pen(bool down, int x, int y);
+/* The touch screen's picture, 256 x 192 XRGB8888, as the last frame left it (NULL with no game). */
+const uint32_t *pdds_touch_screen(void);
 #ifdef __cplusplus
 }
 #endif

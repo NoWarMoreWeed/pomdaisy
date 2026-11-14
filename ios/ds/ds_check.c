@@ -50,11 +50,18 @@ static int play(const char *path, int frames) {
   void *state = malloc(stateSize ? stateSize : 1);
   bool stateOk = stateSize && pd_state_save(state, stateSize) && pd_state_load(state, stateSize);
   free(state);
-  printf("%s: %d frames in %.2f s = %.0f fps (%.1fx of %.2f), %dx%d frame %llu sum %08x, save %zu, state %zu %s\n", path,
-         frames, t, frames / t, frames / t / pd_fps(), pd_fps(), w, h, (unsigned long long)serial, sum, pd_save_image(NULL),
-         stateSize, stateOk ? "ok" : "FAILED");
+  static uint32_t touch[256 * 192];
+  uint64_t touchSerial = pd_touch_copy(0, touch); // a DS game: the touch screen comes beside the frame
+  uint32_t touchSum = 0;
+  for (int i = 0; i < 256 * 192; i++)
+    touchSum = touchSum * 31 + touch[i];
+  bool touchOk = pd_is_ds_path(path) ? touchSerial != 0 : touchSerial == 0;
+  printf("%s: %d frames in %.2f s = %.0f fps (%.1fx of %.2f), %dx%d frame %llu sum %08x, touch screen %llu sum %08x, "
+         "save %zu, state %zu %s\n",
+         path, frames, t, frames / t, frames / t / pd_fps(), pd_fps(), w, h, (unsigned long long)serial, sum,
+         (unsigned long long)touchSerial, touchSum, pd_save_image(NULL), stateSize, stateOk && touchOk ? "ok" : "FAILED");
   pd_unload();
-  return serial && stateOk ? 0 : 1;
+  return serial && stateOk && touchOk ? 0 : 1;
 }
 
 int main(int argc, char **argv) {
