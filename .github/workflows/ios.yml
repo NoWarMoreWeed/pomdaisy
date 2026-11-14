@@ -1,7 +1,9 @@
 name: iOS
 
-# PomDaisy: the iOS build. Step 1 compiles the core (mGBA + companion) for iPhone / iPad and links a check program
-# against it; the app and the TestFlight upload come next.
+# PomDaisy: the iOS build. Builds the core (mGBA + companion, ios/core) for iPhone / iPad, generates the Xcode project
+# (ios/App/project.yml, XcodeGen) and archives the app. With the App Store Connect secrets set (ASC_KEY_ID,
+# ASC_ISSUER_ID, ASC_KEY_P8, APPLE_TEAM_ID) the archive is signed and uploaded to TestFlight; without them it's an
+# unsigned compile check.
 on:
   push:
     branches: [ios]
@@ -17,17 +19,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  core:
+  app:
     runs-on: macos-15
+    env:
+      HAS_ASC: ${{ secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' && secrets.ASC_KEY_P8 != '' && secrets.APPLE_TEAM_ID != '' }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: mGBA submodule
         run: git submodule update --init --depth 1 third_party/mgba
       - name: Tools
         run: |
-          cmake --version
           xcodebuild -version
           brew list ninja >/dev/null 2>&1 || brew install ninja
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
       - name: Core for iPhone / iPad (arm64)
         run: |
           cmake -S ios/core -B build/ios -G Ninja \
@@ -36,22 +40,71 @@ jobs:
             -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-          cmake --build build/ios --target pomdaisy_core pomdaisy_link_check -- -k 0
-      - name: Core for the simulator (arm64)
+          cmake --build build/ios --target pomdaisy_core pomdaisy_link_check
+          ls -la build/ios/libpomdaisy_core.a
+      - name: Xcode project
+        working-directory: ios/App
+        run: xcodegen generate
+      - name: Archive (unsigned compile check)
+        if: env.HAS_ASC != 'true'
+        working-directory: ios/App
         run: |
-          cmake -S ios/core -B build/sim -G Ninja \
-            -DCMAKE_SYSTEM_NAME=iOS \
-            -DCMAKE_OSX_SYSROOT=iphonesimulator \
-            -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-          cmake --build build/sim --target pomdaisy_core
-      - name: Sizes
-        run: ls -la build/ios/libpomdaisy_core.a build/sim/libpomdaisy_core.a build/ios/pomdaisy_link_check
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: pomdaisy-core
-          path: |
-            build/ios/libpomdaisy_core.a
-            build/sim/libpomdaisy_core.a
+          set -o pipefail
+          xcodebuild -project PomDaisy.xcodeproj -scheme PomDaisy -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/PomDaisy.xcarchive" archive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO 2>&1 | grep -E "error|warning: .*\.swift|ARCHIVE|BUILD" | tail -n 150
+      - name: App Store Connect key
+        if: env.HAS_ASC == 'true'
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          chmod 600 "$RUNNER_TEMP/AuthKey.p8"
+      - name: Archive (signed)
+        if: env.HAS_ASC == 'true'
+        working-directory: ios/App
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          xcodebuild -project PomDaisy.xcodeproj -scheme PomDaisy -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/PomDaisy.xcarchive" archive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" 2>&1 | grep -E "error|warning: .*\.swift|ARCHIVE|BUILD|Signing|provisioning" | tail -n 150
+      - name: Upload to TestFlight
+        if: env.HAS_ASC == 'true' && github.event_name != 'pull_request'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/PomDaisy.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tail -n 60
+      - name: Remove the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8"
