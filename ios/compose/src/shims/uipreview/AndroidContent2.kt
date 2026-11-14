@@ -3,7 +3,9 @@ package android.content
 import android.net.Uri
 
 open class Intent() {
-    constructor(ctx: Context, cls: Class<*>) : this()
+    /** The activity class it starts (its simple name; ActivityHost finds the screen by it). */
+    var component: String? = null
+    constructor(ctx: Context, cls: Class<*>) : this() { component = cls.simpleName }
     constructor(action: String, uri: Uri? = null) : this() {
         this.action = action
         this.data = uri
@@ -11,8 +13,10 @@ open class Intent() {
     constructor(o: Intent) : this() {
         action = o.action
         data = o.data
+        component = o.component
+        extras.putAll(o.extras)
     }
-    fun setClass(ctx: Context, cls: Class<*>) = this
+    fun setClass(ctx: Context, cls: Class<*>) = apply { component = cls.simpleName }
     fun setClassName(pkg: String, cls: String) = this
     fun setFlags(f: Int) = this
     fun addFlags(f: Int) = this
@@ -20,12 +24,25 @@ open class Intent() {
 
     var action: String? = null
     var data: Uri? = null
-    private val extras = HashMap<String, String>()
-    fun putExtra(k: String, v: String) = apply { extras[k] = v }
-    fun putExtra(k: String, v: Boolean) = apply { extras[k] = v.toString() }
-    fun getStringExtra(k: String): String? = extras[k]
+    private val extras = HashMap<String, Any?>()
+    fun putExtra(k: String, v: String?) = apply { extras[k] = v }
+    fun putExtra(k: String, v: Boolean) = apply { extras[k] = v }
+    fun putExtra(k: String, v: Int) = apply { extras[k] = v }
+    fun putExtra(k: String, v: Long) = apply { extras[k] = v }
+    fun putExtra(k: String, v: Float) = apply { extras[k] = v }
+    fun putExtra(k: String, v: Array<String>?) = apply { extras[k] = v }
+    fun putExtra(k: String, v: IntArray?) = apply { extras[k] = v }
+    fun putExtras(o: Intent) = apply { extras.putAll(o.extras) }
+    fun getStringExtra(k: String): String? = extras[k] as? String
+    fun getIntExtra(k: String, d: Int): Int = extras[k] as? Int ?: d
+    fun getLongExtra(k: String, d: Long): Long = extras[k] as? Long ?: d
+    fun getFloatExtra(k: String, d: Float): Float = extras[k] as? Float ?: d
+    @Suppress("UNCHECKED_CAST") fun getStringArrayExtra(k: String): Array<String>? = extras[k] as? Array<String>
+    fun getIntArrayExtra(k: String): IntArray? = extras[k] as? IntArray
+    fun hasExtra(k: String) = extras.containsKey(k)
+    fun removeExtra(k: String) { extras.remove(k) }
     fun setType(t: String) = this
-    fun getBooleanExtra(k: String, default: Boolean): Boolean = extras[k]?.toBoolean() ?: default
+    fun getBooleanExtra(k: String, default: Boolean): Boolean = extras[k] as? Boolean ?: default
 
     companion object {
         const val ACTION_VIEW = "android.intent.action.VIEW"

@@ -1,36 +1,49 @@
-// PomDaisy (iOS): the entry points Swift calls. Each shows one of the Android app's own screens, built from its own
-// Kotlin / Compose sources (see build.gradle.kts).
+// PomDaisy (iOS): the entry points Swift calls. The window runs the Android app's own activities (its Kotlin / Compose
+// sources, module appui) on ActivityHost's stack, starting with its Library as on Android.
 package com.pokedaisy.ios
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.window.ComposeUIViewController
 import platform.UIKit.UIViewController
 
-/** The Android app's Library (LibraryActivity), the first screen of the app: the games in Documents/files/roms. */
-fun LibraryViewController(): UIViewController = ComposeUIViewController { ActivityContent { com.pokedaisy.app.LibraryActivity() } }
+private var registered = false
 
-/** The Android app's top-screen Settings (SettingsActivity). */
-fun SettingsViewController(): UIViewController = ComposeUIViewController { ActivityContent { com.pokedaisy.app.SettingsActivity() } }
-
-/** Runs an activity's onCreate / onResume as Android would and shows what it passed to setContent {}. */
-@Composable
-private fun ActivityContent(make: () -> androidx.activity.ComponentActivity) {
-    val content = remember {
-        runCatching {
-            androidx.activity.compose.Captured.content = null
-            val a = make()
-            a.onCreate(null)
-            a.onStart()
-            a.onResume()
-            androidx.activity.compose.Captured.content
-        }.onFailure { it.printStackTrace() }.getOrNull()
-    }
-    if (content != null) content() else Box(Modifier.fillMaxSize().background(Color.Black)) { Text("Couldn't start this screen", color = Color.White) }
+private fun registerActivities() {
+    if (registered) return
+    registered = true
+    ActivityHost.register("LibraryActivity") { com.pokedaisy.app.LibraryActivity() }
+    ActivityHost.register("SettingsActivity") { com.pokedaisy.app.SettingsActivity() }
+    ActivityHost.register("SaveEditorActivity") { com.pokedaisy.app.SaveEditorActivity() }
 }
+
+/** The app as on Android: its Library first, the rest started from there. [onMissing]: a screen iOS hasn't got yet. */
+fun AppViewController(onMissing: (String) -> Unit): UIViewController = ComposeUIViewController {
+    registerActivities()
+    ActivityHost.missing = onMissing
+    LaunchedEffect(Unit) {
+        if (ActivityHost.top == null) ActivityHost.start(android.content.Intent().also { it.component = "LibraryActivity" })
+    }
+    BackEdge { ActivityHost.Content() }
+}
+
+/** BACK on iOS: a swipe in from the left edge (as Android's back gesture). */
+@Composable
+private fun BackEdge(content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize().pointerInput(Unit) {
+        var fromEdge = false
+        var dx = 0f
+        detectHorizontalDragGestures(
+            onDragStart = { o -> fromEdge = o.x < 24f * density; dx = 0f },
+            onDragEnd = { if (fromEdge && dx > 80f * density) ActivityHost.back() },
+        ) { _, d -> dx += d }
+    }) { content() }
+}
+
+/** BACK from Swift (the app's own back button, if it shows one). */
+fun goBack() = ActivityHost.back()

@@ -2,41 +2,35 @@ import PomDaisyCompose
 import SwiftUI
 import UIKit
 
-/// One of the Android app's own screens (its Kotlin / Compose code, ios/compose), shown as is.
-struct AndroidScreen: UIViewControllerRepresentable {
-    enum Screen { case library, settings }
-    let screen: Screen
+/// The Android app itself (its Kotlin / Compose code, ios/compose): its Library first, its other screens from there.
+struct AndroidApp: UIViewControllerRepresentable {
+    var onMissing: (String) -> Void = { _ in }
 
     func makeUIViewController(context: Context) -> UIViewController {
-        switch screen {
-        case .library: return MainKt.LibraryViewController()
-        case .settings: return MainKt.SettingsViewController()
-        }
+        MainKt.AppViewController(onMissing: { name in onMissing(name) })
     }
 
     func updateUIViewController(_ controller: UIViewController, context: Context) {}
 }
 
-/// A test page: the Android app's Library and Settings on the iPhone, from the same code.
+/// A test page: the Android app on the iPhone, from the same code. Screens iOS hasn't got yet say so.
 struct AndroidPreview: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var screen = AndroidScreen.Screen.library
+    @State private var missing: String?
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            Group {
-                if screen == .library { AndroidScreen(screen: .library) } else { AndroidScreen(screen: .settings) }
-            }
-            .ignoresSafeArea()
-            HStack(spacing: 8) {
-                Button(screen == .library ? "Einstellungen" : "Bibliothek") {
-                    screen = screen == .library ? .settings : .library
-                }
-                Button("Schließen") { dismiss() }
-            }
-            .buttonStyle(.borderedProminent)
-            .padding(10)
+            AndroidApp(onMissing: { missing = $0 })
+                .ignoresSafeArea()
+            Button("Schließen") { dismiss() }
+                .buttonStyle(.borderedProminent)
+                .padding(10)
         }
         .statusBarHidden()
+        .alert("Noch nicht auf iOS", isPresented: Binding(get: { missing != nil }, set: { if !$0 { missing = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(missing ?? "")
+        }
     }
 }
