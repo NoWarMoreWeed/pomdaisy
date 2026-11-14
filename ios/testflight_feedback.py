@@ -75,6 +75,9 @@ def main():
             if sh.get("url"):
                 fetch(sh["url"], os.path.join(out, f"{name}-{j}.png"))
     print(f"{len(crashes['data'])} crash reports, {len(shots['data'])} screenshot feedbacks")
+    # Counts only (no tester data): which builds the API sees, to tell an empty list from a wrong app.
+    builds = get(f"/v1/builds?filter[app]={app}&sort=-uploadedDate&limit=5") or {"data": []}
+    print("newest builds:", ", ".join(b["attributes"].get("version", "?") for b in builds["data"]))
 
 
 if __name__ == "__main__":

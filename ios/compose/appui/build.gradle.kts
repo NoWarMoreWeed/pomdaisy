@@ -25,10 +25,11 @@ val prepSrc = tasks.register<Sync>("prepSrc") {
         var l = line.replace(Regex("@(JvmStatic|JvmField|JvmOverloads|JvmName|JvmInline|JvmSuppressWildcards)\\b"), "@kotlin.jvm.$1")
             .replace("object : LinkedHashMap<", "object : java.util.LinkedHashMap<")
             .replace("java.lang.Long.", "java.lang.JLong.")
+            .replace(Regex("\\((\\w+) as (java\\.lang\\.)?Object\\)"), "kotlin.pdMonitor($1)")
         if (l.startsWith("package ")) l = "@file:Suppress(\"DEPRECATION_ERROR\")\n" + l + "\nimport kotlinx.coroutines.IO"
         l
     }
-    inputs.property("filterVersion", 4)
+    inputs.property("filterVersion", 5)
     doLast {
         val left = destinationDir.walk().filter { it.isFile && it.readText().contains(Regex("\\bexternal fun ")) }.toList()
         if (left.isNotEmpty()) throw GradleException("external funs outside genJni's jniFiles: " + left.joinToString { it.name })

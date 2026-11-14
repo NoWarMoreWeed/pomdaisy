@@ -109,3 +109,8 @@ object PdThreadId {
         return id
     }
 }
+
+/** `(x as Object).wait()` / `.notify()` on a plain Any (prepSrc rewrites the cast): on the JVM every object is a monitor,
+ *  here a java.lang.Object per lock object is kept for it. */
+private val pdMonitors = HashMap<Any, java.lang.Object>()
+fun pdMonitor(o: Any): java.lang.Object = o as? java.lang.Object ?: synchronized(pdMonitors) { pdMonitors.getOrPut(o) { java.lang.Object() } }

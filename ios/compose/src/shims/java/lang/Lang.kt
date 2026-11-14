@@ -327,7 +327,7 @@ open class Object {
         cond.unlock()
         kotlin.pdLock.reacquire(depth)
     }
-    fun wait(ms: Long, nanos: Int) = wait(ms)
+    fun wait(ms: Long, nanos: Int) = wait(if (ms == 0L && nanos > 0) 1L else ms)
     fun notify() { cond.lock(); cond.signal(); cond.unlock() }
     fun notifyAll() { cond.lock(); cond.broadcast(); cond.unlock() }
 }
