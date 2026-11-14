@@ -71,6 +71,8 @@ static void *romCopy;
 static _Atomic uint32_t keys;
 static _Atomic int pointerX, pointerY;
 static _Atomic bool pointerDown;
+static _Atomic bool pointerPressed; // a press since the last frame: held for the core at least one frame (a quick tap)
+static bool pointerFrame;           // what the core sees this frame
 static _Atomic bool ffOn;
 static _Atomic int ffSpeed = 1;
 
@@ -83,6 +85,8 @@ void pd_set_pointer(int x, int y, bool down) {
   atomic_store(&pointerX, x < -0x7FFF ? -0x7FFF : x > 0x7FFF ? 0x7FFF : x);
   atomic_store(&pointerY, y < -0x7FFF ? -0x7FFF : y > 0x7FFF ? 0x7FFF : y);
   atomic_store(&pointerDown, down);
+  if (down)
+    atomic_store(&pointerPressed, true);
 }
 void pd_set_panel(int w, int h) {
   char v[32];
@@ -320,7 +324,7 @@ static int16_t input_state(unsigned port, unsigned device, unsigned index, unsig
   if (device == RETRO_DEVICE_POINTER)
     return id == RETRO_DEVICE_ID_POINTER_X         ? (int16_t)atomic_load(&pointerX)
            : id == RETRO_DEVICE_ID_POINTER_Y       ? (int16_t)atomic_load(&pointerY)
-           : id == RETRO_DEVICE_ID_POINTER_PRESSED ? atomic_load(&pointerDown)
+           : id == RETRO_DEVICE_ID_POINTER_PRESSED ? pointerFrame
                                                    : 0;
   return 0;
 }
@@ -375,6 +379,9 @@ void pd_reset(void) {
     retro_reset();
 }
 void pd_run(void) {
+  // A tap that went down and up between two frames still reaches the core as one frame down, then up: the core
+  // takes a tap on the quick menu / companion when the finger lifts.
+  pointerFrame = atomic_load(&pointerDown) || atomic_exchange(&pointerPressed, false);
   if (loaded)
     retro_run();
 }

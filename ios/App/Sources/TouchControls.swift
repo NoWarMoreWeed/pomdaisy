@@ -65,7 +65,8 @@ final class TouchControlsView: UIView {
             let by = b.maxY - smallH - unit * 0.35
             set(Int32(PD_KEY_SELECT), CGRect(x: b.midX - smallW - unit * 0.15, y: by, width: smallW, height: smallH))
             set(Int32(PD_KEY_START), CGRect(x: b.midX + unit * 0.15, y: by, width: smallW, height: smallH))
-            let ty = b.minY + unit * 0.2
+            // The core's buttons go in a row of their own under the shoulders (beside them they overlapped L / R).
+            let ty = b.minY + unit * 0.15 + shoulderH + unit * 0.3
             set(Int32(PD_KEY_X), CGRect(x: b.midX - smallW - unit * 0.15, y: ty, width: smallW, height: smallH))
             set(Int32(PD_KEY_Y), CGRect(x: b.midX + unit * 0.15, y: ty, width: smallW, height: smallH))
         case .overlay:
@@ -111,13 +112,19 @@ final class TouchControlsView: UIView {
             (pressed & (1 << UInt32(b.key)) != 0 ? down : fill).setFill()
             path.fill()
             stroke.setStroke(); path.lineWidth = 2; path.stroke()
-            let size = b.small ? b.rect.height * 0.42 : b.rect.height * 0.45
-            let attrs: [NSAttributedString.Key: Any] = [
+            var size = b.small ? b.rect.height * 0.42 : b.rect.height * 0.45
+            let s = NSString(string: b.label)
+            var attrs: [NSAttributedString.Key: Any] = [
                 .font: UIFont.systemFont(ofSize: size, weight: .bold),
                 .foregroundColor: stroke,
             ]
-            let s = NSString(string: b.label)
-            let sz = s.size(withAttributes: attrs)
+            var sz = s.size(withAttributes: attrs)
+            let room = b.rect.width * 0.84
+            if sz.width > room { // a long label (BEGLEITER) shrinks to fit its button
+                size *= room / sz.width
+                attrs[.font] = UIFont.systemFont(ofSize: size, weight: .bold)
+                sz = s.size(withAttributes: attrs)
+            }
             s.draw(at: CGPoint(x: b.rect.midX - sz.width / 2, y: b.rect.midY - sz.height / 2), withAttributes: attrs)
         }
     }
