@@ -46,9 +46,18 @@ interface ViewCompositionStrategy {
     class DisposeOnLifecycleDestroyed(l: Any?) : ViewCompositionStrategy
 }
 
+/** Android's carries a frame clock (Choreographer): a Recomposer made over it needs one, so this does too. */
 object AndroidUiDispatcher {
-    val Main: kotlinx.coroutines.CoroutineDispatcher get() = kotlinx.coroutines.Dispatchers.Main
-    val CurrentThread: kotlinx.coroutines.CoroutineDispatcher get() = kotlinx.coroutines.Dispatchers.Main
+    val Main: kotlin.coroutines.CoroutineContext get() = kotlinx.coroutines.Dispatchers.Main + UiFrameClock
+    val CurrentThread: kotlin.coroutines.CoroutineContext get() = Main
+}
+
+/** A frame about every 16 ms (the Compose tree on screen has the real display-link clock; this one drives stray recomposers). */
+private object UiFrameClock : androidx.compose.runtime.MonotonicFrameClock {
+    override suspend fun <R> withFrameNanos(onFrame: (frameTimeNanos: Long) -> R): R {
+        kotlinx.coroutines.delay(16)
+        return onFrame((platform.Foundation.NSProcessInfo.processInfo.systemUptime * 1e9).toLong())
+    }
 }
 
 /** The View a composable runs in (Android's LocalView): the host's root here. */
