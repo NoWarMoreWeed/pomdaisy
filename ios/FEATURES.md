@@ -14,7 +14,9 @@ geschrieben ist, muss für iOS neu gebaut werden.
 | Funktion | Status | Anmerkung |
 |---|---|---|
 | GBA, Game Boy, Game Boy Color | ✅ | ein mGBA-Kern, ohne JIT |
-| Nintendo DS | 🟡 | DSperate-Kern ohne JIT (Interpreter), auf dem iPhone 14 Pro Max bei rund 40 % Auslastung. Beide Bildschirme: hochkant übereinander, quer der obere groß und der Touchscreen daneben. Kein echtes Widescreen (EXPAND gibt es nur im melonDS-Kern der Android-App) |
+| Nintendo DS | 🟡 | zwei Kerne, beide ohne JIT, im Pause-Menü wählbar: DSperate (Standard, mit Begleiter; iPhone 14 Pro Max rund 40 % Auslastung) und melonDS (der Kern der Android-App, mit EXPAND; Geschwindigkeit auf dem Gerät noch ungemessen). Beide Bildschirme: hochkant übereinander, quer nebeneinander |
+| EXPAND (DS-Breitbild) | 🟡 | mit melonDS: die Oberwelt füllt den Bildschirm, der Touchscreen schwebt bei Bedarf ein (TOUCH, oder von selbst bei bekannten Spielen). Nur für Spiele mit Feld-Daten (Platin USA / FR / ES, HG / SS, Schwarz / Weiß und Nachfolger …); ungetestet auf dem Gerät |
+| DS RESOLUTION (Hochskalieren) | ❌ | braucht OpenGL ES 3.2, das iOS nicht hat (wäre eine Metal-Umsetzung) |
 | Spieleliste, Import (Dateien-App, Teilen, +) | ✅ | |
 | ZIP / 7z-Archive | ❌ | |
 | Spielnamen statt Dateinamen (Hash-Erkennung) | ❌ | aktuell nur der Dateiname ohne Klammern |

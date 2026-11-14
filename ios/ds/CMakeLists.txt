@@ -138,23 +138,27 @@ if(APPLE)
 else()
   add_custom_command(OUTPUT ${OBJ}
     COMMAND ${CMAKE_LINKER} -r --whole-archive ${PARTS} -o ${OBJ}
-    COMMAND ${CMAKE_OBJCOPY} --keep-global-symbols=${EXPORTS} ${OBJ}
+    # Its symbols local, and its COMDAT groups dissolved: a group the linker had already taken from another core's
+    # object would otherwise be dropped from this one, which still calls into it by a local name.
+    COMMAND ${CMAKE_OBJCOPY} --keep-global-symbols=${EXPORTS} --remove-section=.group ${OBJ}
     DEPENDS pomdaisy_ds_entry pd_ds_presentation dsperate_core ${EXPORTS} VERBATIM)
 endif()
 add_custom_target(pomdaisy_ds ALL DEPENDS ${OBJ})
 
-# The app's link, tried here: its bridge with both cores (-DPD_GB_CORE=<ios/core's libpomdaisy_core.a>). A duplicate
+# The app's link, tried here: its bridge with all the cores (-DPD_GB_CORE=<ios/core's libpomdaisy_core.a>). A duplicate
 # or missing symbol shows before Xcode links the app; on a host that can run it, it plays games through the bridge:
 # `pomdaisy_ds_check <dir> <game> [frames] ...`.
 set(PD_GB_CORE "" CACHE FILEPATH "ios/core's libpomdaisy_core.a, for the two-core link check")
 if(PD_GB_CORE)
   set(BRIDGE ${ROOT}/ios/App/Sources/Bridge)
-  add_executable(pomdaisy_ds_check ds_check.c ${BRIDGE}/pd_bridge.c ${OBJ})
+  # The melonDS core (ios/melonds's pomdaisy_md.o): the bridge links all three.
+  set(PD_MD_CORE "" CACHE FILEPATH "ios/melonds's pomdaisy_md.o, for the link check")
+  add_executable(pomdaisy_ds_check ds_check.c ${BRIDGE}/pd_bridge.c ${OBJ} ${PD_MD_CORE})
   set_source_files_properties(${OBJ} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
   add_dependencies(pomdaisy_ds_check pomdaisy_ds)
   set_target_properties(pomdaisy_ds_check PROPERTIES LINKER_LANGUAGE CXX)
   target_include_directories(pomdaisy_ds_check PRIVATE ${BRIDGE} ${ROOT}/third_party/mgba/src/platform/libretro)
-  target_link_libraries(pomdaisy_ds_check PRIVATE ${PD_GB_CORE} m)
+  target_link_libraries(pomdaisy_ds_check PRIVATE ${PD_GB_CORE} m z)
   if(NOT APPLE)
     target_link_libraries(pomdaisy_ds_check PRIVATE pthread dl)
   endif()

@@ -1,7 +1,8 @@
 /* Links the app's bridge (pd_bridge.c) with both cores, as the app does: a duplicate or missing symbol shows here
  * before Xcode links the app. On a host that can run it, it also plays games through the bridge:
- *   pomdaisy_ds_check <dir for the core's files> <game> [frames] [<game> [frames]] ...
- * (a .nds goes to the DS core, anything else to the Game Boy core), printing each game's speed. */
+ *   [PD_DS_CORE=1] pomdaisy_ds_check <dir for the core's files> <game> [frames] [<game> [frames]] ...
+ * (a .nds goes to a DS core - DSperate, or melonDS with PD_DS_CORE=1 - anything else to the Game Boy core), printing
+ * each game's speed. */
 #include "pd_bridge.h"
 
 #include <stdio.h>
@@ -68,6 +69,8 @@ int main(int argc, char **argv) {
   if (argc < 3)
     return 0; // the link was the check
   pd_set_dirs(argv[1], argv[1]);
+  if (getenv("PD_DS_CORE")) // 1: DS games on melonDS
+    pd_set_ds_core(atoi(getenv("PD_DS_CORE")));
   int bad = 0;
   for (int i = 2; i < argc; i++) {
     const char *path = argv[i];

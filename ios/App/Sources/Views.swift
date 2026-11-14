@@ -163,6 +163,12 @@ struct GameView: View {
     @EnvironmentObject var gamepad: Gamepad
     @State private var menu = false
     @AppStorage("liveStats") private var liveStats = true
+    /// melonDS with EXPAND: the touch screen floating in (TOUCH), and whether the game asks for it (its field read).
+    @State private var touchShown = false
+    @State private var touchWanted = false
+    private let touchPoll = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
+
+    private var expanded: Bool { emulator.isDS && emulator.dsMelon && emulator.dsExpand }
 
     var body: some View {
         GeometryReader { geo in
@@ -172,11 +178,30 @@ struct GameView: View {
             let full = CGSize(width: geo.size.width + insets.leading + insets.trailing,
                               height: geo.size.height + insets.top + insets.bottom)
             let ds = DSLayout(full: full, insets: insets, portrait: portrait)
+            let wide = DSExpandLayout(full: full, insets: insets, portrait: portrait)
             // One structure for both orientations (upright, a VStack of game + controls kept touches from the game):
             // the game, then the controls over everything, which pass through every touch that isn't theirs.
             ZStack(alignment: .top) {
                 Color.black.ignoresSafeArea()
-                if emulator.isDS {
+                if expanded {
+                    // EXPAND: the top screen as large as the screen allows; the touch screen floats in over it.
+                    ZStack {
+                        Color.clear
+                        GameScreen()
+                            .frame(width: wide.top.width, height: wide.top.height)
+                            .position(x: wide.top.midX, y: wide.top.midY)
+                        if touchShown || touchWanted {
+                            Color.black.opacity(0.35)
+                                .contentShape(Rectangle())
+                                .onTapGesture { touchShown = false }
+                            GameScreen(kind: .dsTouch)
+                                .frame(width: wide.touch.width, height: wide.touch.height)
+                                .overlay(Rectangle().stroke(.white.opacity(0.8), lineWidth: 2))
+                                .position(x: wide.touch.midX, y: wide.touch.midY)
+                        }
+                    }
+                    .ignoresSafeArea()
+                } else if emulator.isDS {
                     // Both DS screens, placed in the whole screen's coordinates.
                     ZStack {
                         Color.clear
@@ -196,8 +221,12 @@ struct GameView: View {
                     GameScreen().ignoresSafeArea()
                 }
                 if !gamepad.connected {
-                    if emulator.isDS {
-                        TouchControls(style: portrait ? .dsBelow : .dsSide, panel: ds.controls)
+                    if expanded {
+                        TouchControls(style: portrait ? .dsBelow : .dsOverlay, panel: wide.controls, melon: true,
+                                      onSpecial: { touchShown.toggle() })
+                            .ignoresSafeArea()
+                    } else if emulator.isDS {
+                        TouchControls(style: portrait ? .dsBelow : .dsSide, panel: ds.controls, melon: emulator.dsMelon)
                             .ignoresSafeArea()
                     } else {
                         TouchControls(style: portrait ? .below : .overlay,
@@ -231,6 +260,11 @@ struct GameView: View {
                         }
                 }
             }
+        }
+        .onReceive(touchPoll) { _ in
+            // PK_NDS_FIELD_TOUCH (2048): the game waits on its touch screen (a cart PokeDaisy has field reads for).
+            let want = expanded && (pd_ds_field_bits() & 2048) != 0
+            if want != touchWanted { touchWanted = want }
         }
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
@@ -321,6 +355,28 @@ struct GameMenu: View {
                     Toggle("Vorspulen an", isOn: $emulator.fastForward)
                     Picker("Tempo", selection: $emulator.fastForwardSpeed) {
                         ForEach([2, 3, 4, 6, 8], id: \.self) { Text("\($0)x").tag($0) }
+                    }
+                }
+                if emulator.isDS {
+                    Section {
+                        Picker("Kern", selection: $emulator.dsCore) {
+                            Text("DSperate (Begleiter)").tag(0)
+                            Text("melonDS (EXPAND)").tag(1)
+                        }
+                        if emulator.dsCore != (emulator.dsMelon ? 1 : 0) {
+                            Button {
+                                close()
+                                emulator.restartOnChosenCore()
+                            } label: {
+                                Label("Mit diesem Kern neu starten", systemImage: "arrow.triangle.2.circlepath")
+                            }
+                        }
+                        Toggle("EXPAND (Breitbild)", isOn: $emulator.dsExpand)
+                            .disabled(!emulator.dsMelon)
+                    } header: {
+                        Text("Nintendo DS")
+                    } footer: {
+                        Text("melonDS zeigt mit EXPAND mehr von der Spielwelt, hat aber noch keinen Begleiter. EXPAND braucht ein Spiel, das PokeDaisy kennt (z. B. Platin USA, HeartGold / SoulSilver, Schwarz / Weiß); sonst bleibt das Bild 4:3. Der Spielstand im Spiel gilt für beide Kerne, Speicherplätze sind je Kern getrennt.")
                     }
                 }
                 Section {

@@ -2,6 +2,7 @@
 // into the slices' lists instead of the game's: keep it in step with that function when the submodule moves.
 
 #include "pk_nds_wide.h"
+#include "pk_nds_platform.h"
 
 #include <NDS.h>
 #include <GPU.h>
@@ -1053,7 +1054,10 @@ void pk_nds_wide_set(NDS* nds, bool on)
         d.renderer = std::make_unique<SoftRenderer>();
         d.renderer->Reset(nds->GPU);
     }
-    for (int i = 0; i < HELPERS; i++) wide.pool.threads.emplace_back(helperLoop, i);
+    for (int i = 0; i < HELPERS; i++) wide.pool.threads.emplace_back([i] {
+        pkNdsThreadPriority();
+        helperLoop(i);
+    });
     wide.out.assign((size_t) OW * OH, 0xFF000000u);
     nds->GPU.GPU3D.WideHookUser = &wide;
     nds->GPU.GPU3D.WideSubmitHook = onSubmit;

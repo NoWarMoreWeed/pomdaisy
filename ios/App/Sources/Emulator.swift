@@ -11,6 +11,19 @@ final class Emulator: ObservableObject {
     @Published private(set) var running = false
     /// A Nintendo DS game is running (the DS core: X / Y are the game's, the companion is on L2).
     @Published private(set) var isDS = false
+    /// The running DS game is on melonDS (EXPAND, no companion), not DSperate.
+    @Published private(set) var dsMelon = false
+    /// Which core the next DS game starts on: 0 DSperate (with the companion), 1 melonDS (with EXPAND).
+    @Published var dsCore = UserDefaults.standard.integer(forKey: "dsCore") {
+        didSet { UserDefaults.standard.set(dsCore, forKey: "dsCore") }
+    }
+    /// melonDS's EXPAND: the overworld drawn past the top screen's edges to fill the screen.
+    @Published var dsExpand = UserDefaults.standard.object(forKey: "dsExpand") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(dsExpand, forKey: "dsExpand")
+            pd_set_ds_expand(dsExpand)
+        }
+    }
     @Published var paused = false {
         didSet { if paused { flushSave() } }
     }
@@ -61,6 +74,10 @@ final class Emulator: ObservableObject {
         stopRequested = false
         rom = url
         isDS = ds
+        dsMelon = ds && dsCore == 1
+        Storage.melonStates = dsMelon
+        pd_set_ds_core(Int32(dsMelon ? PD_DS_CORE_MELONDS : PD_DS_CORE_DSPERATE))
+        pd_set_ds_expand(dsExpand)
         running = true
         paused = false
         fastForward = false
@@ -105,6 +122,13 @@ final class Emulator: ObservableObject {
 
     func flushSave() {
         perform { [weak self] in self?.writeSaveIfChanged() }
+    }
+
+    /// Starts the running game again on the other DS core (`dsCore`): saved and stopped first, like leaving it.
+    func restartOnChosenCore() {
+        guard let rom else { return }
+        stop()
+        start(rom)
     }
 
     func reset() {
@@ -159,7 +183,11 @@ final class Emulator: ObservableObject {
         romForThread = url
         let ds = Storage.isDS(url)
         let ok: Bool
-        if ds {
+        if ds && Storage.melonStates {
+            // melonDS reads and writes the battery save itself: saves/<game>.sav, the same file DSperate uses.
+            pd_set_dirs(Storage.system.path, Storage.saves.path)
+            ok = pd_load(url.path, nil, 0)
+        } else if ds {
             let hint = Storage.dsSaveHint(for: url)
             try? FileManager.default.removeItem(at: hint)
             try? FileManager.default.copyItem(at: Storage.saveFile(for: url), to: hint)

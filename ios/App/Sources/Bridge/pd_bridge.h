@@ -16,6 +16,17 @@ enum {
 
 /* Directories (system = BIOS / core files, saves = where the core may write its own). Before pd_load. */
 void pd_set_dirs(const char *systemDir, const char *saveDir);
+/* Which core plays the next DS game: DSperate (with the DS companion; the default) or melonDS (with EXPAND). */
+#define PD_DS_CORE_DSPERATE 0
+#define PD_DS_CORE_MELONDS 1
+void pd_set_ds_core(int which);
+/* The DS core that's up (PD_DS_CORE_*), or -1 with no DS game. */
+int pd_ds_core(void);
+/* melonDS's EXPAND on or off (on by default); taken at the next frame. From any thread. */
+void pd_set_ds_expand(bool on);
+/* melonDS's field read after the last frame (PK_NDS_FIELD_* bits; 0 on DSperate or a cart without field reads).
+ * 2048 (PK_NDS_FIELD_TOUCH): the game wants its touch screen. */
+int pd_ds_field_bits(void);
 /* A Nintendo DS game (by its file name): the DS core plays it, and reads it from its path itself. */
 bool pd_is_ds_path(const char *path);
 /* Loads the core for the game and the game. A Game Boy game's bytes are copied; a DS game takes rom NULL / size 0. */

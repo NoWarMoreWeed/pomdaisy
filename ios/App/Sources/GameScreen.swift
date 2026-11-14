@@ -148,6 +148,29 @@ struct GameScreen: UIViewRepresentable {
     func updateUIView(_ view: GameScreenView, context: Context) {}
 }
 
+/// A DS game on melonDS with EXPAND: the top screen fills the screen (the core widens the picture to its shape), the
+/// touch screen floats in over it when wanted, the buttons over the picture (sideways) or under it (upright).
+struct DSExpandLayout {
+    let top: CGRect, touch: CGRect, controls: CGRect
+
+    init(full: CGSize, insets: EdgeInsets, portrait: Bool) {
+        if portrait {
+            let controlsH: CGFloat = 270
+            let h = max(120, full.height - insets.top - insets.bottom - controlsH)
+            top = CGRect(x: 0, y: insets.top, width: full.width, height: h)
+            let w = full.width * 0.9
+            touch = CGRect(x: (full.width - w) / 2, y: top.midY - w * 0.375, width: w, height: w * 0.75)
+            controls = CGRect(x: 0, y: top.maxY, width: full.width, height: full.height - insets.bottom - top.maxY)
+        } else {
+            let left = insets.leading * 0.5, right = insets.trailing * 0.5
+            top = CGRect(x: left, y: 0, width: full.width - left - right, height: full.height)
+            let h = full.height * 0.55
+            touch = CGRect(x: (full.width - h * 4 / 3) / 2, y: (full.height - h) / 2, width: h * 4 / 3, height: h)
+            controls = .zero
+        }
+    }
+}
+
 /// Where a Nintendo DS game's two screens and its buttons go, in the coordinates of the whole screen.
 /// Upright: the two screens one over the other at the top, as on the console, the buttons under them. Sideways: the
 /// top screen large on the left, the touch screen beside it top right, the buttons under the touch screen (the

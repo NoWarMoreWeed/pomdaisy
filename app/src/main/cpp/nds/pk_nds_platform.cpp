@@ -118,7 +118,13 @@ void Log(LogLevel level, const char* fmt, ...)
 // --- threads ---
 
 struct Thread { std::thread t; };
-Thread* Thread_Create(std::function<void()> func) { return new Thread{std::thread(std::move(func))}; }
+Thread* Thread_Create(std::function<void()> func)
+{
+    return new Thread{std::thread([f = std::move(func)] {
+        pkNdsThreadPriority();
+        f();
+    })};
+}
 void Thread_Free(Thread* thread)
 {
     if (thread->t.joinable()) thread->t.detach();

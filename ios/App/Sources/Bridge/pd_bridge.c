@@ -3,6 +3,7 @@
 #include "pd_bridge.h"
 #include "libretro.h"
 #include "pd_ds_core.h"
+#include "pd_md_core.h"
 
 #include <pthread.h>
 #include <stdarg.h>
@@ -13,8 +14,9 @@
 #include <strings.h>
 #include <time.h>
 
-/* ---- the two cores: the Game Boy one (mGBA + the companion, ios/core: retro_*) and the Nintendo DS one (DSperate +
- * the DS companion, ios/ds: pdds_*). Both are linked in; a game's file name picks one. ---- */
+/* ---- the cores: the Game Boy one (mGBA + the companion, ios/core: retro_*) and two for the Nintendo DS - DSperate +
+ * the DS companion (ios/ds: pdds_*) and melonDS + EXPAND (ios/melonds: pdmd_*). All are linked in; a game's file name
+ * picks Game Boy or DS, pd_set_ds_core which DS core. ---- */
 struct pd_core {
   void (*set_environment)(retro_environment_t);
   void (*set_video_refresh)(retro_video_refresh_t);
@@ -35,18 +37,33 @@ struct pd_core {
   void *(*get_memory_data)(unsigned);
   size_t (*get_memory_size)(unsigned);
   bool path_only; // the core reads the game from its path itself: no copy of it in memory
+  /* A DS core: the pen on the touch screen (its pixels) and the touch screen's picture, which the app shows itself. */
+  void (*set_pen)(bool, int, int);
+  const uint32_t *(*touch_screen)(void);
 };
 static const struct pd_core gbCore = {
   retro_set_environment, retro_set_video_refresh, retro_set_audio_sample, retro_set_audio_sample_batch,
   retro_set_input_poll, retro_set_input_state, retro_init, retro_deinit, retro_load_game, retro_unload_game,
   retro_get_system_av_info, retro_run, retro_reset, retro_serialize_size, retro_serialize, retro_unserialize,
-  retro_get_memory_data, retro_get_memory_size, false};
+  retro_get_memory_data, retro_get_memory_size, false, NULL, NULL};
 static const struct pd_core dsCore = {
   pdds_set_environment, pdds_set_video_refresh, pdds_set_audio_sample, pdds_set_audio_sample_batch,
   pdds_set_input_poll, pdds_set_input_state, pdds_init, pdds_deinit, pdds_load_game, pdds_unload_game,
   pdds_get_system_av_info, pdds_run, pdds_reset, pdds_serialize_size, pdds_serialize, pdds_unserialize,
-  pdds_get_memory_data, pdds_get_memory_size, true};
+  pdds_get_memory_data, pdds_get_memory_size, true, pdds_set_pen, pdds_touch_screen};
+static const struct pd_core mdCore = {
+  pdmd_set_environment, pdmd_set_video_refresh, pdmd_set_audio_sample, pdmd_set_audio_sample_batch,
+  pdmd_set_input_poll, pdmd_set_input_state, pdmd_init, pdmd_deinit, pdmd_load_game, pdmd_unload_game,
+  pdmd_get_system_av_info, pdmd_run, pdmd_reset, pdmd_serialize_size, pdmd_serialize, pdmd_unserialize,
+  pdmd_get_memory_data, pdmd_get_memory_size, true, pdmd_set_pen, pdmd_touch_screen};
 static const struct pd_core *core = &gbCore;
+static _Atomic int dsCoreChoice = PD_DS_CORE_DSPERATE;
+static _Atomic bool dsExpand = true;
+
+void pd_set_ds_core(int which) { atomic_store(&dsCoreChoice, which); }
+int pd_ds_core(void) { return core == &mdCore ? PD_DS_CORE_MELONDS : core == &dsCore ? PD_DS_CORE_DSPERATE : -1; }
+void pd_set_ds_expand(bool on) { atomic_store(&dsExpand, on); }
+int pd_ds_field_bits(void) { return core == &mdCore ? pdmd_field_bits() : 0; }
 
 bool pd_is_ds_path(const char *path) {
   const char *dot = path ? strrchr(path, '.') : NULL;
@@ -312,7 +329,7 @@ static void video_refresh(const void *data, unsigned w, unsigned h, size_t pitch
 static uint32_t touchBuf[TOUCH_W * TOUCH_H];
 static uint64_t touchSerial;
 static void touch_grab(void) {
-  const uint32_t *p = pdds_touch_screen();
+  const uint32_t *p = core->touch_screen ? core->touch_screen() : NULL;
   if (!p)
     return;
   pthread_mutex_lock(&frameLock);
@@ -413,7 +430,7 @@ static int16_t input_state(unsigned port, unsigned device, unsigned index, unsig
 bool pd_load(const char *path, const void *rom, size_t size) {
   if (loaded)
     pd_unload();
-  core = pd_is_ds_path(path) ? &dsCore : &gbCore;
+  core = !pd_is_ds_path(path) ? &gbCore : atomic_load(&dsCoreChoice) == PD_DS_CORE_MELONDS ? &mdCore : &dsCore;
   if (!core->path_only && (!rom || !size))
     return false;
   pthread_mutex_lock(&optionLock);
@@ -484,13 +501,15 @@ void pd_run(void) {
   pointerFrame = atomic_load(&pointerDown) || atomic_exchange(&pointerPressed, false);
   if (!loaded)
     return;
-  if (core == &dsCore) // a quick tap is one frame down, as the pointer's
-    pdds_set_pen(atomic_load(&penDown) || atomic_exchange(&penPressed, false), atomic_load(&penX), atomic_load(&penY));
+  if (core->set_pen) // a quick tap is one frame down, as the pointer's
+    core->set_pen(atomic_load(&penDown) || atomic_exchange(&penPressed, false), atomic_load(&penX), atomic_load(&penY));
+  if (core == &mdCore)
+    pdmd_set_expand(atomic_load(&dsExpand));
   struct timespec a, b;
   clock_gettime(CLOCK_MONOTONIC, &a);
   core->run();
   clock_gettime(CLOCK_MONOTONIC, &b);
-  if (core == &dsCore)
+  if (core->touch_screen)
     touch_grab();
   double ms = (double)(b.tv_sec - a.tv_sec) * 1000 + (double)(b.tv_nsec - a.tv_nsec) / 1e6;
   double avg = atomic_load(&frameMs);

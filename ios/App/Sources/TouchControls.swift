@@ -5,8 +5,9 @@ import UIKit
 /// D-pad + A + B can be held together. Touches that hit no button fall through to the game below (overlay mode).
 final class TouchControlsView: UIView {
     /// `.below` / `.overlay`: a Game Boy game upright / sideways. `.dsBelow` / `.dsSide`: a Nintendo DS game, whose
-    /// buttons go into `panel` (the room DSLayout leaves beside its two screens).
-    enum Style { case below, overlay, dsBelow, dsSide }
+    /// buttons go into `panel` (the room DSLayout leaves beside its two screens). `.dsOverlay`: a DS game sideways with
+    /// EXPAND, the buttons over the game like a Game Boy game's.
+    enum Style { case below, overlay, dsBelow, dsSide, dsOverlay }
 
     struct Button {
         let label: String
@@ -14,11 +15,19 @@ final class TouchControlsView: UIView {
         var rect: CGRect = .zero
         let round: Bool
         let small: Bool
+        /// The app's own button (melonDS's TOUCH): it calls onSpecial when pressed and never reaches the game.
+        var special = false
     }
+
+    /// melonDS: the core has no companion, so the DS's extra button is TOUCH (the touch screen in or out).
+    var melon = false {
+        didSet { if melon != oldValue { buttons = Self.makeButtons(ds: ds, melon: melon); setNeedsLayout(); setNeedsDisplay() } }
+    }
+    var onSpecial: (() -> Void)?
 
     var style: Style = .below {
         didSet {
-            if ds != (oldValue == .dsBelow || oldValue == .dsSide) { buttons = Self.makeButtons(ds: ds) }
+            if ds != Self.isDS(oldValue) { buttons = Self.makeButtons(ds: ds, melon: melon) }
             setNeedsLayout()
             setNeedsDisplay()
         }
@@ -30,9 +39,10 @@ final class TouchControlsView: UIView {
 
     /// A Nintendo DS game: X and Y are the game's own (four face buttons in a diamond), and the DS core's button is
     /// L2 (a tap: the companion, held: the quick menu).
-    private var ds: Bool { style == .dsBelow || style == .dsSide }
+    private var ds: Bool { Self.isDS(style) }
+    private static func isDS(_ s: Style) -> Bool { s == .dsBelow || s == .dsSide || s == .dsOverlay }
 
-    private static func makeButtons(ds: Bool) -> [Button] {
+    private static func makeButtons(ds: Bool, melon: Bool = false) -> [Button] {
         var b = [
             Button(label: "A", key: Int32(PD_KEY_A), round: true, small: false),
             Button(label: "B", key: Int32(PD_KEY_B), round: true, small: false),
@@ -45,7 +55,8 @@ final class TouchControlsView: UIView {
             b += [
                 Button(label: "X", key: Int32(PD_KEY_X), round: true, small: false),
                 Button(label: "Y", key: Int32(PD_KEY_Y), round: true, small: false),
-                Button(label: "BEGLEITER", key: Int32(PD_KEY_L2), round: false, small: true),
+                melon ? Button(label: "TOUCH", key: Int32(PD_KEY_L2), round: false, small: true, special: true)
+                    : Button(label: "BEGLEITER", key: Int32(PD_KEY_L2), round: false, small: true),
             ]
         } else {
             // The Game Boy core's own buttons: X opens the companion, Y the quick menu.
@@ -113,6 +124,23 @@ final class TouchControlsView: UIView {
             setNeedsDisplay()
             return
         }
+        if style == .dsOverlay {
+            // Over the wide picture: the D-pad and L left, the face buttons and R right, SELECT / START and TOUCH low.
+            let unit = min(b.width, b.height) * 0.2
+            let pad = unit * 2.6, face = unit * 0.9
+            let cellW = unit * 1.45, cellH = unit * 0.45
+            let midY = b.minY + b.height * 0.6
+            dpad = CGRect(x: b.minX + unit * 0.3, y: midY - pad / 2, width: pad, height: pad)
+            diamond(b.maxX - unit * 0.3 - face * 1.5, midY, face)
+            set(Int32(PD_KEY_L), CGRect(x: b.minX + unit * 0.2, y: b.minY + unit * 0.2, width: cellW * 1.1, height: cellH * 1.2))
+            set(Int32(PD_KEY_R), CGRect(x: b.maxX - unit * 0.2 - cellW * 1.1, y: b.minY + unit * 0.2, width: cellW * 1.1, height: cellH * 1.2))
+            let by = b.maxY - cellH - unit * 0.1
+            set(Int32(PD_KEY_SELECT), CGRect(x: b.midX - cellW * 1.5 - 8, y: by, width: cellW, height: cellH))
+            set(Int32(PD_KEY_L2), CGRect(x: b.midX - cellW / 2, y: by, width: cellW, height: cellH))
+            set(Int32(PD_KEY_START), CGRect(x: b.midX + cellW / 2 + 8, y: by, width: cellW, height: cellH))
+            setNeedsDisplay()
+            return
+        }
         if style == .dsSide {
             // Under the touch screen: R, BEGLEITER, SELECT, START in two rows, the face buttons right of them. The
             // D-pad and L lie over the top screen's left side.
@@ -173,7 +201,7 @@ final class TouchControlsView: UIView {
     // ---- drawing ----
     override func draw(_ rect: CGRect) {
         // Over the game the buttons are faint; a DS game sideways has only its D-pad and L there.
-        let alpha: CGFloat = style == .overlay ? 0.35 : style == .dsSide ? 0.5 : 0.85
+        let alpha: CGFloat = style == .overlay || style == .dsOverlay ? 0.35 : style == .dsSide ? 0.5 : 0.85
         let fill = UIColor(white: 1, alpha: alpha * 0.25), stroke = UIColor(white: 1, alpha: alpha)
         let down = UIColor(white: 1, alpha: alpha * 0.7)
         // D-pad: a cross
@@ -233,7 +261,7 @@ final class TouchControlsView: UIView {
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         // Only the buttons (and, below the game, the controls' own area) take touches; the rest goes to the game.
-        keys(at: point) != 0 || (style == .below && point.y > reservedTop) || (ds && panel.contains(point))
+        keys(at: point) != 0 || (style == .below && point.y > reservedTop) || (ds && style != .dsOverlay && panel.contains(point))
     }
 
     private func update(_ touches: Set<UITouch>, ended: Bool) {
@@ -244,8 +272,10 @@ final class TouchControlsView: UIView {
         let now = fingers.values.reduce(0, |)
         if now != pressed {
             if now & ~pressed != 0 { haptic.impactOccurred() }
+            let special = buttons.filter(\.special).reduce(UInt32(0)) { $0 | 1 << UInt32($1.key) }
+            if now & ~pressed & special != 0 { onSpecial?() }
             pressed = now
-            Emulator.shared.setTouchKeys(now)
+            Emulator.shared.setTouchKeys(now & ~special)
             setNeedsDisplay()
         }
     }
@@ -267,17 +297,23 @@ struct TouchControls: UIViewRepresentable {
     var style: TouchControlsView.Style
     var reservedTop: CGFloat = 0
     var panel = CGRect.zero
+    var melon = false
+    var onSpecial: (() -> Void)? = nil
     func makeUIView(context: Context) -> TouchControlsView {
         let v = TouchControlsView()
+        v.melon = melon
         v.style = style
         v.reservedTop = reservedTop
         v.panel = panel
+        v.onSpecial = onSpecial
         return v
     }
     func updateUIView(_ view: TouchControlsView, context: Context) {
         if view.style != style { view.releaseAll(); view.style = style }
+        if view.melon != melon { view.releaseAll(); view.melon = melon }
         view.reservedTop = reservedTop
         view.panel = panel
+        view.onSpecial = onSpecial
     }
     static func dismantleUIView(_ view: TouchControlsView, coordinator: ()) { view.releaseAll() }
 }

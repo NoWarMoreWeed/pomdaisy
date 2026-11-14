@@ -24,9 +24,14 @@ enum Storage {
 
     static func baseName(_ rom: URL) -> String { rom.deletingPathExtension().lastPathComponent }
     static func saveFile(for rom: URL) -> URL { saves.appendingPathComponent(baseName(rom) + ".sav") }
-    static func resumeState(for rom: URL) -> URL { states.appendingPathComponent(baseName(rom) + ".resume.state") }
+    /// A DS game's states are each core's own (neither reads the other's): melonDS's carry ".melonds" in their name.
+    static var melonStates = false
+    private static func stateName(_ rom: URL) -> String {
+        baseName(rom) + (isDS(rom) && melonStates ? ".melonds" : "")
+    }
+    static func resumeState(for rom: URL) -> URL { states.appendingPathComponent(stateName(rom) + ".resume.state") }
     static func slotState(for rom: URL, slot: Int) -> URL {
-        states.appendingPathComponent(baseName(rom) + ".slot\(slot).state")
+        states.appendingPathComponent(stateName(rom) + ".slot\(slot).state")
     }
 
     /// A DS game the core has no save type for takes its save's size from `<name>.srm` in its save folder while it

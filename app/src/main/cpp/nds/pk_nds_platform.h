@@ -17,3 +17,16 @@ typedef void (*PkNdsLogFn)(int level, const char* message);
 
 // Where melonDS's log lines go (null: dropped).
 void pkNdsSetLog(PkNdsLogFn fn);
+
+#ifdef __APPLE__
+#include <pthread.h>
+#include <pthread/qos.h>
+#endif
+// Called first on every thread the DS core starts (melonDS's render thread, EXPAND's helpers): on iOS such a thread
+// asks for the emulation's priority, or it may run as background work on the slow cores. Elsewhere nothing.
+inline void pkNdsThreadPriority()
+{
+#ifdef __APPLE__
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+#endif
+}
