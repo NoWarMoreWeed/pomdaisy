@@ -1,0 +1,57 @@
+name: iOS
+
+# PomDaisy: the iOS build. Step 1 compiles the core (mGBA + companion) for iPhone / iPad and links a check program
+# against it; the app and the TestFlight upload come next.
+on:
+  push:
+    branches: [ios]
+  pull_request:
+    branches: [ios]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: mGBA submodule
+        run: git submodule update --init --depth 1 third_party/mgba
+      - name: Tools
+        run: |
+          cmake --version
+          xcodebuild -version
+          brew list ninja >/dev/null 2>&1 || brew install ninja
+      - name: Core for iPhone / iPad (arm64)
+        run: |
+          cmake -S ios/core -B build/ios -G Ninja \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake --build build/ios --target pomdaisy_core pomdaisy_link_check -- -k 0
+      - name: Core for the simulator (arm64)
+        run: |
+          cmake -S ios/core -B build/sim -G Ninja \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphonesimulator \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake --build build/sim --target pomdaisy_core
+      - name: Sizes
+        run: ls -la build/ios/libpomdaisy_core.a build/sim/libpomdaisy_core.a build/ios/pomdaisy_link_check
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pomdaisy-core
+          path: |
+            build/ios/libpomdaisy_core.a
+            build/sim/libpomdaisy_core.a
