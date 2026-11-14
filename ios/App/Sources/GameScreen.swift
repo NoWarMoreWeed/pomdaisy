@@ -19,6 +19,42 @@ final class GameScreenView: UIView {
         layer.magnificationFilter = .nearest
         layer.minificationFilter = .linear
         layer.contentsGravity = .resizeAspect
+        isUserInteractionEnabled = true
+        // The finger as the libretro pointer, through a recognizer that sees every touch from down to up (inside a
+        // SwiftUI hierarchy, plain touchesBegan didn't reach the core). Pressed for 0 s = it starts at the touch.
+        let press = UILongPressGestureRecognizer(target: self, action: #selector(pressed(_:)))
+        press.minimumPressDuration = 0
+        press.allowableMovement = .greatestFiniteMagnitude
+        press.cancelsTouchesInView = false
+        press.delaysTouchesBegan = false
+        addGestureRecognizer(press)
+    }
+
+    /// A faint dot under the finger while it's down (a test build's aid: shows the touch reached the game).
+    private let touchDot: CALayer = {
+        let l = CALayer()
+        l.bounds = CGRect(x: 0, y: 0, width: 22, height: 22)
+        l.cornerRadius = 11
+        l.backgroundColor = UIColor(white: 1, alpha: 0.35).cgColor
+        l.isHidden = true
+        return l
+    }()
+
+    @objc private func pressed(_ g: UILongPressGestureRecognizer) {
+        let p = g.location(in: self)
+        if touchDot.superlayer == nil { layer.addSublayer(touchDot) }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        switch g.state {
+        case .began, .changed:
+            pointer(at: p, down: true)
+            touchDot.position = p
+            touchDot.isHidden = false
+        default:
+            pointer(at: p, down: false)
+            touchDot.isHidden = true
+        }
+        CATransaction.commit()
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -74,18 +110,14 @@ final class GameScreenView: UIView {
         return CGRect(x: (bounds.width - w) / 2, y: (bounds.height - h) / 2, width: w, height: h)
     }
 
-    private func pointer(_ touch: UITouch, down: Bool) {
-        let p = touch.location(in: self), r = frameRect
+    private func pointer(at p: CGPoint, down: Bool) {
+        let r = frameRect
         guard r.width > 0, r.height > 0 else { return }
         let x = Int((p.x - r.minX) * 0xFFFE / r.width) - 0x7FFF
         let y = Int((p.y - r.minY) * 0xFFFE / r.height) - 0x7FFF
         pd_set_pointer(Int32(x), Int32(y), down)
     }
 
-    override func touchesBegan(_ t: Set<UITouch>, with e: UIEvent?) { if let f = t.first { pointer(f, down: true) } }
-    override func touchesMoved(_ t: Set<UITouch>, with e: UIEvent?) { if let f = t.first { pointer(f, down: true) } }
-    override func touchesEnded(_ t: Set<UITouch>, with e: UIEvent?) { if let f = t.first { pointer(f, down: false) } }
-    override func touchesCancelled(_ t: Set<UITouch>, with e: UIEvent?) { if let f = t.first { pointer(f, down: false) } }
 }
 
 struct GameScreen: UIViewRepresentable {
