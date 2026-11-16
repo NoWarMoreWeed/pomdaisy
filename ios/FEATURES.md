@@ -2,6 +2,10 @@
 
 Vergleich mit der Android-App (PokeDaisy). Grundlage: die Projektnotizen (`CLAUDE.md`) und der Stand des Branches `ios`.
 
+Die Tabellen gelten für die **iOS-Oberfläche** (Swift, Standard beim Start). Die **„Android-Ansicht“** ist die echte
+Android-App mit allen ihren Funktionen, aber noch experimentell: Bibliothek und Spielbildschirm laufen im Simulator,
+auf dem Gerät ist sie ab TestFlight-Build 32 testbar. Mehr in [README.md](README.md).
+
 - ✅ vorhanden
 - 🟡 teilweise / ungetestet
 - ❌ fehlt
