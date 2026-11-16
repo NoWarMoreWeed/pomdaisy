@@ -28,6 +28,11 @@
 
 </div>
 
+> [!NOTE]
+> **iPhone und iPad (PomDaisy):** Eine frühe iOS-Version mit GBA, Game Boy und DS (ohne JIT) und, als Experiment, der
+> echten Android-Oberfläche. Sie liegt im Branch [`ios`](https://github.com/NoWarMoreWeed/pomdaisy/tree/ios).
+> Stand, Installation und was du dafür brauchst: [Deutsch](https://github.com/NoWarMoreWeed/pomdaisy/blob/ios/ios/README.md) · [English](https://github.com/NoWarMoreWeed/pomdaisy/blob/ios/ios/README.en.md).
+
 PokeDaisy is a Game Boy, Game Boy Color, GBA and Nintendo DS player for Android handhelds with two screens or one,
 made for the Pokemon games of every generation from Red to Black 2 and White 2 and popular ROM hacks. Next to the
 game runs a live companion that reads it as you play: your party, bag, map, battle matchups, Pokedex and a spoiler-free
