@@ -1,3 +1,5 @@
+<p align="right"><strong>🇩🇪 Deutsch</strong> · <a href="README.en.md">🇬🇧 English</a></p>
+
 # PomDaisy: PokeDaisy auf dem iPhone und iPad
 
 PomDaisy ist die iOS-Version von PokeDaisy. Sie liegt im Branch `ios` dieses Repos und ist ein **frühes

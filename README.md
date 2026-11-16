@@ -30,7 +30,7 @@
 
 > [!NOTE]
 > **iPhone und iPad (PomDaisy, Branch `ios`):** Eine frühe iOS-Version mit GBA, Game Boy und DS (ohne JIT) und, als
-> Experiment, der echten Android-Oberfläche. Stand, Installation und was du dafür brauchst: [ios/README.md](ios/README.md).
+> Experiment, der echten Android-Oberfläche. Stand, Installation und was du dafür brauchst: [ios/README.md](ios/README.md) · English: [ios/README.en.md](ios/README.en.md).
 
 PokeDaisy is a Game Boy, Game Boy Color, GBA and Nintendo DS player for Android handhelds with two screens or one,
 made for the Pokemon games of every generation from Red to Black 2 and White 2 and popular ROM hacks. Next to the
