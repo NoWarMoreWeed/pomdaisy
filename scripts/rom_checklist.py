@@ -169,7 +169,7 @@ def main() -> int:
               "--tests '*SiteDataExportTest'")
 
     # The books
-    books = [("readme", REPO / "README.md"), ("features", REPO / "docs/ROM_FEATURES.md"),
+    books = [("readme", REPO / "README.android.md"), ("features", REPO / "docs/ROM_FEATURES.md"),
              ("manual", REPO / "docs/manual/supported-games.md"), ("development", REPO / "docs/DEVELOPMENT.md")]
     port = port_needles(rom)
     for what, file in books:

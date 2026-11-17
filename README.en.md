@@ -2,6 +2,8 @@
 
 # PomDaisy: PokeDaisy on iPhone and iPad
 
+> The Android app PokeDaisy, which PomDaisy is built on: [README.android.md](README.android.md).
+
 PomDaisy is the iOS version of PokeDaisy. It lives on this repo's `ios` branch and is an **early experiment**: it runs,
 but much of it hasn't been checked on real devices yet. As of November 2026.
 
@@ -16,7 +18,7 @@ The app currently has **two interfaces**:
    - **Nintendo DS** on two cores, both **without JIT** (iOS allows no JIT in the App Store or TestFlight):
      DSperate (the default; about 40 % load on an iPhone 14 Pro Max) and melonDS with **EXPAND** (the widescreen
      overworld). Switch between them in the pause menu.
-   - What works and what's missing in detail: [FEATURES.md](FEATURES.md) (in German).
+   - What works and what's missing in detail: [FEATURES.md](https://github.com/NoWarMoreWeed/pomdaisy/blob/ios/ios/FEATURES.md) (in German).
 2. **"Android-Ansicht" (Android view, the button top left).** This is **the real Android app**: the same Kotlin and
    Compose code as on Android, built for iOS with Compose Multiplatform, plus the app's native code (mGBA, melonDS,
    DSperate, EXPAND). The goal is for PomDaisy to look and feel almost exactly like PokeDaisy on Android, and for new
@@ -74,4 +76,4 @@ There's **no public download**. Three ways:
   Connect and uploads them **encrypted** (the repo is public). Only the holder of the private key for
   `ios/feedback_pub.pem` can read them. In a fork, make your own key and replace `feedback_pub.pem`.
 
-Legal notes, licenses and credits are the same as for PokeDaisy (see the [main README](../README.md) and `NOTICE`).
+Legal notes, licenses and credits are the same as for PokeDaisy (see the [Android README](README.android.md) and `NOTICE`).
