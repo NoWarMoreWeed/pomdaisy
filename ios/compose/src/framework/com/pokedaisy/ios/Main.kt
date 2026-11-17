@@ -15,6 +15,23 @@ import kotlinx.cinterop.toKString
 import platform.UIKit.UIViewController
 
 private var registered = false
+private var hooked = false
+
+/** An uncaught Kotlin exception (on any thread, coroutines too) into the app's crash file (Crash.swift), then the crash. */
+@OptIn(ExperimentalForeignApi::class, kotlin.experimental.ExperimentalNativeApi::class)
+private fun hookCrashes() {
+    if (hooked) return
+    hooked = true
+    val path = platform.posix.getenv("PD_CRASH_FILE")?.toKString() ?: return
+    kotlin.native.setUnhandledExceptionHook { t ->
+        val f = platform.posix.fopen(path, "a")
+        if (f != null) {
+            platform.posix.fputs("\n=== Kotlin exception: " + t.stackTraceToString() + "\n", f)
+            platform.posix.fclose(f)
+        }
+        kotlin.native.terminateWithUnhandledException(t)
+    }
+}
 
 private fun registerActivities() {
     if (registered) return
@@ -31,7 +48,10 @@ private fun registerActivities() {
 
 @OptIn(ExperimentalForeignApi::class)
 /** The app as on Android: its Library first, the rest started from there. [onMissing]: a screen iOS hasn't got yet. */
-fun AppViewController(onMissing: (String) -> Unit): UIViewController = ComposeUIViewController {
+fun AppViewController(onMissing: (String) -> Unit): UIViewController {
+    hookCrashes()
+    println("PomDaisy: Android view starting")
+    return ComposeUIViewController {
     registerActivities()
     ActivityHost.missing = onMissing
     LaunchedEffect(Unit) {
@@ -46,6 +66,7 @@ fun AppViewController(onMissing: (String) -> Unit): UIViewController = ComposeUI
         }
     }
     BackEdge { ActivityHost.Content() }
+    }
 }
 
 /** BACK on iOS: a swipe in from the left edge (as Android's back gesture). */

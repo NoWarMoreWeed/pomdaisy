@@ -12,6 +12,9 @@ kotlin {
         target.binaries.framework {
             baseName = "PomDaisyCompose"
             isStatic = true
+            // Release stack traces with function names, files and lines (the crash reports in Crash.swift / Main.kt).
+            freeCompilerArgs += "-Xadd-light-debug=enable"
+            binaryOption("sourceInfoType", "libbacktrace")
         }
     }
     sourceSets {

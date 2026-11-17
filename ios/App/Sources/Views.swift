@@ -9,7 +9,7 @@ struct PomDaisyApp: App {
     @Environment(\.scenePhase) private var phase
     @State private var pausedByBackground = false
 
-    init() { Storage.prepare() }
+    init() { Storage.prepare(); Crash.start() }
 
     var body: some Scene {
         WindowGroup {
@@ -24,6 +24,7 @@ struct PomDaisyApp: App {
             .environmentObject(gamepad)
             .environmentObject(library)
             .preferredColorScheme(.dark)
+            .modifier(CrashNotice())
             .onOpenURL { url in
                 if let rom = try? Storage.importRom(from: url) {
                     library.refresh()

@@ -196,6 +196,14 @@ jobs:
             -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tail -n 60
+      # The build's debug symbols, to turn addresses in the app's crash reports into function names.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: github.event_name == 'push'
+        with:
+          name: dsym-${{ github.run_number }}
+          path: ${{ runner.temp }}/PomDaisy.xcarchive/dSYMs
+          retention-days: 90
+          if-no-files-found: warn
       - name: The .ipa for sideloading (SideStore, AltStore)
         if: github.event_name == 'push'
         run: |
@@ -272,23 +280,24 @@ jobs:
           restore-keys: |
             kmp-sim-${{ runner.os }}-
             kmp-${{ runner.os }}-
-      - name: The Android app's UI for the simulator (debug framework)
+      # Release, as TestFlight's: the Android view crashed on the iPhone at once while the debug build ran here.
+      - name: The Android app's UI for the simulator (release framework, as on the device)
         run: |
           export JAVA_HOME="${JAVA_HOME_21_arm64:-${JAVA_HOME_17_arm64:-$JAVA_HOME}}"
-          ./gradlew -p ios/compose --no-daemon linkDebugFrameworkIosSimulatorArm64
+          ./gradlew -p ios/compose --no-daemon linkReleaseFrameworkIosSimulatorArm64
       - name: Build the app for the simulator
         working-directory: ios/App
         run: |
-          sed -i '' 's#iosArm64/releaseFramework#iosSimulatorArm64/debugFramework#g' project.yml
+          sed -i '' 's#iosArm64/releaseFramework#iosSimulatorArm64/releaseFramework#g' project.yml
           xcodegen generate
           set -o pipefail
-          xcodebuild -project PomDaisy.xcodeproj -scheme PomDaisy -configuration Debug \
+          xcodebuild -project PomDaisy.xcodeproj -scheme PomDaisy -configuration Release \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
             -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO build 2>&1 | grep -E "error|BUILD" | tail -n 100
       - name: Run it on a simulator
         run: |
           OUT="$RUNNER_TEMP/simulator"; mkdir -p "$OUT"
-          APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/PomDaisy.app"
+          APP="$RUNNER_TEMP/dd/Build/Products/Release-iphonesimulator/PomDaisy.app"
           ID=com.nowarmoreweed.pomdaisy
           UDID=$(xcrun simctl list devices available -j | python3 -c '
           import json,sys
@@ -319,6 +328,9 @@ jobs:
           run gba 30 SIMCTL_CHILD_PD_TEST_ROM="$DATA/Documents/roms/diagnostic.gba"
           run gb 30 SIMCTL_CHILD_PD_TEST_ROM="$DATA/Documents/roms/diagnostic.gb"
           cp ~/Library/Logs/DiagnosticReports/PomDaisy* "$OUT/" 2>/dev/null || true
+          # The app's own crash catcher (Crash.swift): its file and any report it made.
+          cp "$DATA/Documents/crashlogs/"* "$OUT/" 2>/dev/null || true
+          if grep -q "=== " "$DATA/Documents/crashlogs/pending.txt" 2>/dev/null; then echo "::warning::the app's crash file holds a crash"; cat "$DATA/Documents/crashlogs/pending.txt"; fi
           ls -la "$OUT"
           for f in "$OUT"/*.log; do echo "== $f"; tail -n 40 "$f"; done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
