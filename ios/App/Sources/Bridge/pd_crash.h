@@ -4,3 +4,6 @@
 void pd_crash_install(const char *path);
 /// Appends [text] to the crash file (e.g. an Objective-C exception's reason, before it aborts).
 void pd_crash_note(const char *text);
+/// Starts the hang watchdog; call on the main thread, then call pd_hang_beat() from its run loop often (< 1 s apart).
+void pd_hang_install(void);
+void pd_hang_beat(void);

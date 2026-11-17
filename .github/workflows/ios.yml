@@ -320,7 +320,12 @@ jobs:
               sleep 5
               xcrun simctl io "$UDID" screenshot "$OUT/$name-${t}s.png" >/dev/null 2>&1 || true
             done
-            if xcrun simctl spawn "$UDID" launchctl list | grep -q "$ID"; then echo "$name: still running"; else echo "::warning::$name: the app is gone (crash?)"; fi
+            pid=$(pgrep -f "PomDaisy.app/PomDaisy" | head -1 || true)
+            if [ -n "$pid" ]; then
+              echo "$name: still running (pid $pid)"
+              # Where every thread is (a hang shows here: the device's watchdog kills a main thread stuck 10 s).
+              sample "$pid" 3 -file "$OUT/$name-sample.txt" >/dev/null 2>&1 || true
+            else echo "::warning::$name: the app is gone (crash?)"; fi
             xcrun simctl terminate "$UDID" $ID 2>/dev/null || true
             sleep 2
           }

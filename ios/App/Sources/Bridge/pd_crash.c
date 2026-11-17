@@ -73,3 +73,63 @@ void pd_crash_install(const char *path) {
 void pd_crash_note(const char *text) {
     put(text);
 }
+
+// ---- Hangs. iOS kills an app whose main thread is stuck for ~10 s (0x8BADF00D) with SIGKILL, which no handler sees,
+// so a watchdog thread notices first: if the main thread's heartbeat (pd_hang_beat, a timer on its run loop) stops
+// for 5 s, it stops the main thread for a moment, walks its frame pointers and writes the addresses (with the slide,
+// for the dSYM) to the crash file. Once per run.
+#include <mach/mach.h>
+#include <pthread.h>
+
+static volatile unsigned long beats;
+static mach_port_t main_mach;
+static pthread_t main_pthread;
+
+void pd_hang_beat(void) { beats++; }
+
+static void write_addr_line(unsigned long a) {
+    put("  ");
+    put_hex(a & 0x0000000FFFFFFFFFul);
+    put("\n");
+}
+
+static void *hang_watch(void *arg) {
+    (void)arg;
+    unsigned long last = beats;
+    int still = 0;
+    for (;;) {
+        sleep(1);
+        if (beats != last) { last = beats; still = 0; continue; }
+        if (++still < 5) continue;
+        put("\n=== hang: the main thread has been stuck for 5 s\n");
+        put(slide_line);
+        char *lo = (char *)pthread_get_stackaddr_np(main_pthread) - pthread_get_stacksize_np(main_pthread);
+        char *hi = (char *)pthread_get_stackaddr_np(main_pthread);
+        if (thread_suspend(main_mach) == KERN_SUCCESS) {
+            arm_thread_state64_t st;
+            mach_msg_type_number_t n = ARM_THREAD_STATE64_COUNT;
+            if (thread_get_state(main_mach, ARM_THREAD_STATE64, (thread_state_t)&st, &n) == KERN_SUCCESS) {
+                write_addr_line((unsigned long)arm_thread_state64_get_pc(st));
+                write_addr_line((unsigned long)arm_thread_state64_get_lr(st));
+                unsigned long *fp = (unsigned long *)arm_thread_state64_get_fp(st);
+                for (int i = 0; i < 96 && (char *)fp > lo && (char *)fp < hi - 16; i++) {
+                    write_addr_line(fp[1]);
+                    unsigned long *next = (unsigned long *)fp[0];
+                    if (next <= fp) break;
+                    fp = next;
+                }
+            }
+            thread_resume(main_mach);
+        }
+        put("=== end of hang\n");
+        return NULL;
+    }
+}
+
+void pd_hang_install(void) {
+    main_mach = mach_thread_self();
+    main_pthread = pthread_self();
+    pthread_t t;
+    pthread_create(&t, NULL, hang_watch, NULL);
+    pthread_detach(t);
+}

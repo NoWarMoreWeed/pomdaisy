@@ -49,6 +49,9 @@ enum Crash {
             setvbuf(stdout, nil, _IOLBF, 0)
         }
         pd_crash_install(pending.path)
+        pd_hang_install()
+        let beat = Timer(timeInterval: 0.5, repeats: true) { _ in pd_hang_beat() }
+        RunLoop.main.add(beat, forMode: .common)
         setenv("PD_CRASH_FILE", pending.path, 1)
         NSSetUncaughtExceptionHandler { e in
             pd_crash_note("\n=== Objective-C exception: \(e.name.rawValue): \(e.reason ?? "")\n\(e.callStackSymbols.joined(separator: "\n"))\n")
