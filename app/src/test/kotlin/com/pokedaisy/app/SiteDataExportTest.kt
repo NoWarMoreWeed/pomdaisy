@@ -70,12 +70,12 @@ class SiteDataExportTest {
     /** README's "Supported games" table (the hand-checked feature matrix): its columns, then each row's
      * game, version and cells (`yes` ✅ / `part` ◐ / `no` —). */
     private fun readmeMatrix(): Pair<List<String>, List<List<String>>> {
-        val lines = File(root, "README.md").readLines()
+        val lines = File(root, "README.android.md").readLines()
         val from = lines.indexOfFirst { it.trim() == "## Supported games" }
         val table = lines.drop(from + 1).takeWhile { !it.startsWith("## ") }
             .filter { it.trimStart().startsWith("|") }
             .map { row -> row.trim().removePrefix("|").removeSuffix("|").split("|").map { it.trim() } }
-        assertTrue("no Supported games table in README.md", table.size > 2)
+        assertTrue("no Supported games table in README.android.md", table.size > 2)
         val cell = mapOf("✅" to "yes", "◐" to "part", "—" to "no")
         val rows = table.drop(2).map { r -> r.take(2) + r.drop(2).map { c -> cell[c] ?: error("README matrix: unknown cell '$c' in $r") } }
         return table[0].drop(2) to rows
