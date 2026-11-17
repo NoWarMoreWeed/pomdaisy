@@ -41,10 +41,14 @@ Both interfaces use the same folders, so your games and saves show up in both.
 
 ## Installing
 
-There's **no public download**. Three ways:
+Three ways:
 
-1. **A TestFlight invite.** The owner of this repo can add you as a tester, on request only.
-2. **Build it yourself on GitHub (your own TestFlight).** You need a paid Apple Developer account (99 a year), but no
+1. **The `.ipa` from the releases, with SideStore or AltStore.** No developer account needed, a normal Apple ID is
+   enough. Every build is posted as a release by itself: [newest build](https://github.com/NoWarMoreWeed/pomdaisy/releases/latest). Download `PomDaisy-build-<number>.ipa`
+   and open it in SideStore or AltStore, which sign the app with your Apple ID. With a free Apple ID the app has to be
+   refreshed every 7 days (SideStore does it in the background).
+2. **A TestFlight invite.** The owner of this repo can add you as a tester, on request only.
+3. **Build it yourself on GitHub (your own TestFlight).** You need a paid Apple Developer account (99 a year), but no
    Mac: GitHub Actions builds it on a macOS machine.
    1. Fork the repo.
    2. In `ios/App/project.yml`, change `PRODUCT_BUNDLE_IDENTIFIER` (`com.nowarmoreweed.pomdaisy`) to your own.
@@ -55,8 +59,7 @@ There's **no public download**. Three ways:
       `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` (the contents of the `.p8` file) and `APPLE_TEAM_ID`.
    6. Push to the `ios` branch. The `iOS` workflow (`.github/workflows/ios.yml`) builds the app and uploads it to
       TestFlight. The first run takes about 45 minutes, later ones are faster.
-   Without the secrets the workflow still runs, but only builds as a check and uploads nothing.
-3. **Sideloading (SideStore, AltStore).** That needs an `.ipa` file, which the workflow doesn't make yet.
+   Without the secrets the workflow still runs and posts a release with the `.ipa` in your fork, just no TestFlight.
 
 ## For developers
 
