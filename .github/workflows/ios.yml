@@ -24,6 +24,8 @@ concurrency:
 jobs:
   app:
     runs-on: macos-15
+    permissions:
+      contents: write # the GitHub release with the .ipa
     env:
       HAS_ASC: ${{ secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' && secrets.ASC_KEY_P8 != '' && secrets.APPLE_TEAM_ID != '' }}
     steps:
@@ -194,6 +196,38 @@ jobs:
             -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tail -n 60
+      - name: The .ipa for sideloading (SideStore, AltStore)
+        if: github.event_name == 'push'
+        run: |
+          # The archive is unsigned; SideStore / AltStore sign the app with the player's own Apple ID when installing.
+          APP="$RUNNER_TEMP/PomDaisy.xcarchive/Products/Applications/PomDaisy.app"
+          test -d "$APP"
+          rm -rf "$RUNNER_TEMP/ipa" && mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$RUNNER_TEMP/PomDaisy-build-${{ github.run_number }}.ipa" Payload)
+          ls -la "$RUNNER_TEMP"/*.ipa
+      - name: GitHub release with the .ipa
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ github.run_number }}
+        run: |
+          # One release per build (tag ios-build-N on this commit), its notes the commits since the build before.
+          prev=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName -q '[.[].tagName|select(startswith("ios-build-"))][0] // ""')
+          {
+            echo "PomDaisy (iOS), build $N, the same build as TestFlight's $N."
+            echo
+            echo "Install: open the .ipa with SideStore or AltStore (they sign it with your Apple ID). No games included: put your own ROMs in Files > On My iPhone > PomDaisy > roms."
+            echo
+            echo "Early test version: the Android view (button top left) is the Android app's own interface, still experimental."
+            if [ -n "$prev" ]; then
+              echo
+              echo "Changes since $prev:"
+              gh api "repos/$GITHUB_REPOSITORY/compare/$prev...$GITHUB_SHA" --jq '.commits[].commit.message | split("\n")[0] | "- " + .' | tail -n 40
+            fi
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "ios-build-$N" "$RUNNER_TEMP/PomDaisy-build-$N.ipa" --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "PomDaisy iOS build $N" --notes-file "$RUNNER_TEMP/notes.md" --latest
       - name: Remove the key
         if: always()
         run: rm -f "$RUNNER_TEMP/AuthKey.p8"

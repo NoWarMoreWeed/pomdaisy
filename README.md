@@ -41,10 +41,14 @@ Beide Oberflächen benutzen dieselben Ordner. Spiele und Spielstände sind also 
 
 ## Installieren
 
-Es gibt **keinen öffentlichen Download**. Drei Wege:
+Drei Wege:
 
-1. **TestFlight-Einladung.** Der Besitzer dieses Repos kann dich als Tester eintragen. Das geht nur auf Anfrage.
-2. **Selbst bauen über GitHub (für die eigene TestFlight).** Das braucht einen bezahlten Apple-Developer-Account
+1. **Die `.ipa` aus den Releases, mit SideStore oder AltStore.** Kein Developer-Account nötig, eine normale Apple-ID
+   reicht. Jeder Build landet automatisch als Release: [neuester Build](https://github.com/NoWarMoreWeed/pomdaisy/releases/latest). Die Datei `PomDaisy-build-<Nummer>.ipa`
+   herunterladen und in SideStore oder AltStore öffnen; die App wird dabei mit deiner Apple-ID signiert. Mit einer
+   kostenlosen Apple-ID muss die App alle 7 Tage erneuert werden (SideStore macht das im Hintergrund).
+2. **TestFlight-Einladung.** Der Besitzer dieses Repos kann dich als Tester eintragen. Das geht nur auf Anfrage.
+3. **Selbst bauen über GitHub (für die eigene TestFlight).** Das braucht einen bezahlten Apple-Developer-Account
    (99 € im Jahr), aber keinen Mac. GitHub Actions baut auf einem macOS-Rechner:
    1. Repo forken.
    2. In `ios/App/project.yml` die `PRODUCT_BUNDLE_IDENTIFIER` (`com.nowarmoreweed.pomdaisy`) auf eine eigene ändern.
@@ -55,9 +59,7 @@ Es gibt **keinen öffentlichen Download**. Drei Wege:
       `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` (der Inhalt der `.p8`-Datei) und `APPLE_TEAM_ID`.
    6. Auf den Branch `ios` pushen. Der Workflow `iOS` (`.github/workflows/ios.yml`) baut die App und lädt sie in
       TestFlight hoch. Der erste Lauf dauert etwa 45 Minuten, spätere sind schneller.
-   Ohne die Secrets läuft der Workflow trotzdem, baut aber nur zur Kontrolle und lädt nichts hoch.
-3. **Sideloaden (SideStore, AltStore).** Dafür braucht man eine `.ipa`-Datei. Die erzeugt der Workflow im Moment
-   noch nicht.
+   Ohne die Secrets läuft der Workflow trotzdem und legt im Fork ein Release mit der `.ipa` an, nur TestFlight fällt weg.
 
 ## Für Entwickler
 
